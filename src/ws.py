@@ -546,6 +546,15 @@ def git_credential(cuenta, accion):
     if cuenta == "auto":
         cuenta = cuenta_para_url(cfg, datos)
     usuario = cfg.get("github", {}).get(cuenta, {}).get("usuario")
+    if not usuario and cuenta == "personal":
+        # Sin config (o sin [github.personal]): la cuenta activa de tu gh de
+        # siempre, en su GH_CONFIG_DIR por defecto. Nunca bloquear lo personal.
+        env = {k: v for k, v in os.environ.items() if k != "GH_CONFIG_DIR"}
+        r = subprocess.run([binario_real("gh") or "gh", "auth", "token", "--hostname", "github.com"],
+                           capture_output=True, text=True, env=env)
+        if r.returncode == 0 and r.stdout.strip():
+            print(f"username=x-access-token\npassword={r.stdout.strip()}")
+        return
     if not usuario:
         sys.exit(t("err_not_connected", c=cuenta))
     token = _token_gh(cuenta, usuario)

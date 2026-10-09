@@ -133,3 +133,13 @@ class CredencialPorUrl(CasoMundo):
         entrada = "protocol=https\nhost=github.com\npath=yo-personal/x.git\nusername=u\npassword=p\n\n"
         self.m.run(["git", "credential", "approve"], cwd=self.m.home, entrada=entrada)
         self.assertEqual([c for c in self.m.llamadas("mock-keychain-helper") if c["args"][:1] == ["store"]], [])
+
+
+class SinConfig(CasoMundo):
+    def test_sin_config_lo_personal_sigue_funcionando(self):
+        # p. ej. mientras se mueve ws.toml: el helper no debe bloquear pushes personales
+        self.ws_ok("sync")
+        self.m.config.unlink()
+        fuera = self.m.repo(self.m.home / "src/mio")
+        rc, datos, _ = self.m.credencial(fuera, "https://github.com/yo-personal/mio.git")
+        self.assertEqual((rc, datos.get("password")), (0, "tok-personal"))
