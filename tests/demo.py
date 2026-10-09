@@ -64,6 +64,8 @@ set -g default-shell /bin/zsh
 set -g default-terminal tmux-256color
 set -g escape-time 0
 set -g mouse on
+setw -g automatic-rename off
+set -g allow-rename off
 set -g status-style bg=default
 set -g status-left "#[fg=#a6e3a1,bold]  #S #{{?@ws,#[fg=#cba6f7#,nobold] #{{@ws}} ,}}#[fg=#585b70]▐ "
 set -g status-left-length 80

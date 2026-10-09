@@ -15,7 +15,9 @@ context (folder or tmux session)
 Works in any tmux, alone or next to other plugins: it imposes no keys, colors
 or conventions. Everything is optional and configurable.
 
-<!-- GIF: prefix+s, switch between two organizations, `gh api user` in each -->
+![tmux-ws: the picker, then each organization with its own GitHub account, git email and Claude profile](docs/demo.gif)
+
+<sub>Recorded from [`docs/demo.tape`](docs/demo.tape) with [VHS](https://github.com/charmbracelet/vhs) on the isolated demo (`tests/demo.py`): made-up organizations and accounts. Regenerate with `nix run nixpkgs#vhs -- docs/demo.tape`.</sub>
 
 ## What it does
 
@@ -212,7 +214,7 @@ set -g @ws-color-selection '#313244'   # selected row background
 set -g @ws-color-border    '#45475a'
 set -g @ws-nerd-font       on          # icons; or @ws-icon-normal/-organization/-environment/-github/-search
 set -g @ws-pointer         '▌'
-set -g @ws-preview         'right,58%,border-left,<120(down,55%,border-top)'
+set -g @ws-preview         'right,58%,border-left,<50(down,55%,border-top)'
 set -g @ws-popup-width 90%   ;  set -g @ws-popup-height 85%
 set -g @ws-popup-style 'fg=#cdd6f4,bg=#181825'  ;  set -g @ws-popup-border-style 'fg=#585b70'
 ```

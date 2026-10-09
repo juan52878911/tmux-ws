@@ -16,7 +16,7 @@ un número 0-255, "#rrggbb" o "default".
   set -g @ws-nerd-font       on          iconos de Nerd Font
   set -g @ws-icon-normal / -organization / -environment / -github / -search
   set -g @ws-pointer         '▌'
-  set -g @ws-preview         'right,58%,border-left,<120(down,55%,border-top)'
+  set -g @ws-preview         'right,58%,border-left,<50(down,55%,border-top)'
 """
 import os
 import shlex
@@ -36,7 +36,7 @@ POR_DEFECTO = {
     "color-border": "bright-black",
     "nerd-font": "off",
     "pointer": "▌",
-    "preview": "right,58%,border-left,<120(down,55%,border-top)",
+    "preview": "right,58%,border-left,<50(down,55%,border-top)",
 }
 
 ICONOS_NERD = {"normal": "", "organization": "", "environment": "",
