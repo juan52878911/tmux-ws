@@ -102,6 +102,57 @@ automatic registration on `cd`), [`share/gitconfig`](share/gitconfig) to
 `~/.gitconfig` and [`share/direnvrc`](share/direnvrc) to
 `~/.config/direnv/direnvrc`.
 
+## Usage
+
+### First time, per machine
+
+1. Install (above) and run `ws doctor`: everything should be green.
+2. Store the secrets your MCPs or variables reference as `${NAME}`:
+   `security add-generic-password -s ws/NAME -w` (macOS) or
+   `secret-tool store --label ws service ws/NAME` (Linux).
+3. Create organizations with `prefix + S` → *＋ new organization* (or write
+   them in `ws.toml`). For an organization with its own GitHub account, the
+   wizard opens the login in a private window; later, `prefix + s` → select the
+   organization → `^g`.
+4. Inside one of its projects, the first `claude` asks for the organization's
+   Claude login (`claude auth login`). Your personal one is untouched.
+
+### Picker (`prefix + s`)
+
+| Key | Action |
+|---|---|
+| `enter` | open or jump to the session; on a header, new session in that group |
+| `j` / `k`, arrows | move |
+| `/` | search (`esc` hides the search) |
+| `^n` | new session (same as `prefix + S`) |
+| `^x` | close session (confirm with `enter` or `y`; `n` cancels) |
+| `^r` | rename session |
+| `^e` | edit `ws.toml` |
+| `^g` | connect the organization's GitHub account |
+| `esc` / `q` | close the picker |
+
+Your own `[acciones]` add more keys. From a floating window (with
+`@ws-float-script`), the picker closes it, opens in the main window and
+reopens it when you come back to that session.
+
+### New session (`prefix + S`)
+
+*Normal* (a plain session, as usual), an existing organization or environment
+(pick a project, create one, or open a loose session), or *＋ new
+organization / environment*. New projects can live in a new folder under the
+organization root, in a folder you already have, or in the current one. Each
+agent of the project gets its own window with the command typed in, not run,
+so nothing uses memory until you press Enter.
+
+### Day to day
+
+- `cd` into a project and use `claude`, `gh`, `git`, `opencode` as always.
+  `ws contexto` tells you where you are; `#{@ws}` can show it in your status bar.
+- Clone a repo from one of an organization's `github_orgs` and it registers
+  itself when you `cd` into it.
+- Change accounts, blocks or MCPs in `ws.toml`; the next command picks them up.
+- Something wrong? `ws doctor`. Need to bypass ws once? `WS_OFF=1 claude`.
+
 ## Configuration
 
 Everything lives in `~/.config/ws/ws.toml`; start from
