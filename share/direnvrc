@@ -1,0 +1,5 @@
+# ws: herramientas Nix del proyecto según ws.toml. Añádelo a ~/.config/direnv/direnvrc
+# (junto a nix-direnv). Los proyectos con herramientas llevan un .envrc: `use ws`.
+use_ws() {
+  eval "$(ws direnv)"
+}

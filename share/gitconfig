@@ -1,0 +1,3 @@
+# ws: correo, clave SSH y cuenta de GitHub por organización. Añádelo a ~/.gitconfig.
+[include]
+	path = ~/.local/state/ws/gitconfig

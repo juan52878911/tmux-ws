@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Lanzador portátil de ws: busca un python >= 3.11 (hace falta tomllib).
+# El paquete de Nix sustituye este archivo por un wrapper con su propio python.
+dir="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+for py in "${WS_PYTHON:-}" python3.13 python3.12 python3.11 python3; do
+  [[ -n "$py" ]] && command -v "$py" >/dev/null 2>&1 \
+    && "$py" -c 'import tomllib' 2>/dev/null \
+    && exec "$py" "$dir/src/ws.py" "$@"
+done
+echo "ws: hace falta python >= 3.11 (o WS_PYTHON apuntando a uno)" >&2
+exit 1

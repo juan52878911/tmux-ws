@@ -1,0 +1,5 @@
+# ws en zsh: shims primero en el PATH y registro automático de repos al hacer cd.
+export PATH="$HOME/.local/share/ws/shims:$PATH"
+autoload -Uz add-zsh-hook
+_ws_descubrir() { [[ -e .git ]] && (ws descubrir "$PWD" >/dev/null 2>&1 &) }
+add-zsh-hook chpwd _ws_descubrir

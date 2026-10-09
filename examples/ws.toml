@@ -1,0 +1,136 @@
+# Ejemplo de ~/.config/ws/ws.toml
+#
+# Contexto de un comando = proyecto cuya carpeta contiene la actual; si no, la
+# raíz de una organización; si no, la organización de la sesión de tmux; si no,
+# Normal (todo como siempre). Configuración = bloques del grupo + los del
+# proyecto - quitar. Los secretos nunca van aquí: ${NOMBRE} se lee del Llavero
+# de macOS (servicio "ws/NOMBRE") o de la variable de entorno.
+
+# nixpkgs de los devShells generados (el módulo de home-manager puede fijarlo).
+[nix]
+nixpkgs = "github:NixOS/nixpkgs/nixpkgs-unstable"
+
+# ─── Cuentas de GitHub ───────────────────────────────────────────────────────
+# "personal" es la de siempre (~/.config/gh y el helper de git habitual).
+# El resto tiene su propio GH_CONFIG_DIR; se conectan desde el selector (^g)
+# con el login web en incógnito.
+[github.personal]
+usuario = "tu-usuario"
+
+[github.empresa]
+usuario = ""
+navegador = "incognito"        # o "chrome:<Nombre del perfil>"
+
+# ─── Organizaciones ──────────────────────────────────────────────────────────
+# claude: "personal" o "propia" (login, historial y memoria aparte).
+# github_orgs: orgs de GitHub suyas; un repo clonado de ellas se registra solo.
+# etiqueta / color: etiqueta de Finder (gris, verde, morado, azul, amarillo,
+# rojo, naranja); false la quita.
+[organizaciones.empresa]
+nombre = "Empresa"
+prefijo = "em"
+raiz = "~/Orgs/Empresa"
+github = "empresa"
+git_correo = "yo@empresa.com"
+claude = "propia"
+github_orgs = ["empresa-org"]
+bloques = ["base", "opencode"]
+color = "azul"
+
+[organizaciones.cliente]
+nombre = "Cliente"
+prefijo = "cl"
+github = "personal"
+git_correo = "yo@personal.dev"
+claude = "personal"
+bloques = ["base"]
+
+# ─── Entornos: tus credenciales con un conjunto de bloques ───────────────────
+[entornos.lab]
+nombre = "Lab"
+prefijo = "lab"
+raiz = "~/Orgs/Lab"
+bloques = ["base", "node"]
+
+# ─── Bloques reutilizables ───────────────────────────────────────────────────
+# mcps · agentes (ventanas que abre la sesión) · herramientas (nixpkgs: si hay
+# alguna, el proyecto carga un devShell de Nix) · permitir (permisos de Claude)
+# · claude_motor ("anthropic" o "minimax") · hook_guardian (bóveda de Obsidian).
+[bloques]
+base      = { mcps = ["kindling", "context7", "tree-sitter"], agentes = ["claude"] }
+figma     = { mcps = ["figma"] }
+obsidian  = { mcps = ["obsidian", "obsidian-mcp-tools"], hook_guardian = true }
+engram    = { mcps = ["engram"] }
+opencode  = { agentes = ["opencode"] }
+minimax   = { claude_motor = "minimax" }
+node      = { herramientas = ["nodejs_24", "pnpm"] }
+python    = { herramientas = ["python313", "uv"] }
+java-qa   = { herramientas = ["jdk21", "maven", "k6"] }
+pc-cliente = { permitir = ["Bash(ssh pc-cliente:*)"] }
+
+# ─── Motores de Claude ───────────────────────────────────────────────────────
+[motores.minimax]
+url = "https://api.minimax.io/anthropic"
+modelo = "MiniMax-M2.7"
+token = "MINIMAX_API_KEY"
+
+# ─── Catálogo de MCPs (cada uno se define una vez) ───────────────────────────
+[mcps.kindling]
+url = "https://mcp.ejemplo.dev/_all"
+headers = { Authorization = "Bearer ${KLING_TOKEN}" }
+
+[mcps.context7]
+url = "https://mcp.ejemplo.dev/context7"
+headers = { Authorization = "Bearer ${KLING_TOKEN}" }
+
+[mcps.figma]
+url = "https://mcp.ejemplo.dev/figma"
+headers = { Authorization = "Bearer ${KLING_TOKEN}" }
+
+[mcps.tree-sitter]
+cmd = ["npx", "-y", "mcp-server-tree-sitter"]
+
+[mcps.obsidian]
+cmd = ["uvx", "mcp-obsidian"]
+env = { OBSIDIAN_API_KEY = "${OBSIDIAN_API_KEY}" }
+
+[mcps.engram]
+cmd = ["engram", "mcp", "--tools=agent"]
+
+
+# ─── Proyectos ───────────────────────────────────────────────────────────────
+# Clave "<grupo>/<nombre>". Opcionales: bloques, quitar y cualquier credencial
+# del grupo (github, git_correo, ssh_clave, claude, navegador).
+[proyectos."empresa/api"]
+ruta = "~/Orgs/Empresa/api"
+bloques = ["java-qa", "pc-cliente"]
+
+[proyectos."cliente/web"]
+ruta = "~/src/cliente-web"
+quitar = ["tree-sitter"]
+
+# ─── Extensión ───────────────────────────────────────────────────────────────
+# Variables por contexto: van en un bloque, una organización o un proyecto
+# (prioridad: bloque < organización < proyecto). Las recibe cualquier comando
+# que pase por ws (shim o `ws exec <programa>`); las que no llevan ${SECRETO}
+# también se exportan en el shell vía direnv.
+[organizaciones.empresa.env]
+AWS_PROFILE = "empresa"
+NPM_TOKEN = "${NPM_TOKEN_EMPRESA}"
+
+# Agentes: cada uno es una ventana de la sesión con su comando escrito.
+[agentes.claude]
+cmd = "claude"
+[agentes.aider]
+cmd = "aider --no-auto-commits"
+
+# Acciones propias del selector: reciben WS_GRUPO, WS_PROYECTO, WS_SESION, WS_RUTA.
+[acciones.lazygit]
+tecla = "ctrl-o"
+etiqueta = "lazygit"
+cmd = "lazygit"
+
+[acciones.web]
+tecla = "ctrl-w"
+etiqueta = "repo web"
+cmd = "gh browse"

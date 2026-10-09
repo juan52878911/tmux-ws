@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Shim de opencode: ws decide la cuenta y la configuración según la carpeta (o la
+# sesión de tmux) y hace exec del opencode real. Fuera de una organización, exec directo.
+exec "$(dirname "$(readlink -f "$0")")/../bin/ws" exec opencode "$@"
