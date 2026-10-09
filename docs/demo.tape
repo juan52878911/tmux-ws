@@ -6,9 +6,9 @@ Output docs/demo.gif
 
 Set Shell "bash"
 Set FontFamily "IosevkaTerm Nerd Font Mono"
-Set FontSize 16
-Set Width 1600
-Set Height 600
+Set FontSize 22
+Set Width 1200
+Set Height 680
 Set Padding 18
 Set Theme "Catppuccin Mocha"
 Set TypingSpeed 55ms

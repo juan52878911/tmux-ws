@@ -87,6 +87,9 @@ set -g @ws-color-match '#f38ba8'
 set -g @ws-color-selection '#313244'
 set -g @ws-color-border '#45475a'
 set -g @ws-nerd-font on
+set -g @ws-popup-width 96%
+set -g @ws-popup-height 92%
+set -g @ws-preview 'right,48%,border-left,<34(down,50%,border-top)'
 run-shell '{RAIZ / "ws.tmux"}'
 """)
     return conf
