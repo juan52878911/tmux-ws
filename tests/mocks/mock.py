@@ -81,5 +81,15 @@ if nombre == "mock-keychain-helper":
         print(f"username={p.get('usuario', '')}\npassword={p.get('token', '')}")
     sys.exit(0)
 
+if nombre == "claude" and os.environ.get("WS_DEMO"):
+    # Para grabar la demo: enseñar con qué identidad arrancaría Claude.
+    perfil = Path(os.environ["CLAUDE_CONFIG_DIR"]).name if os.environ.get("CLAUDE_CONFIG_DIR") else "personal"
+    mcps = []
+    if "--mcp-config" in args:
+        mcps = list(leer(args[args.index("--mcp-config") + 1], {}).get("mcpServers", {}))
+    print(f"\033[38;2;203;166;247m✻ Claude Code\033[0m  account: \033[1m{perfil}\033[0m"
+          f"  ·  MCPs: {', '.join(mcps) or 'your usual ones'}")
+    sys.exit(0)
+
 # claude, opencode y cualquier otro: solo registrar.
 sys.exit(0)

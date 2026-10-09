@@ -246,6 +246,10 @@ python3 tests/run.py --rapido   # without the end-to-end ones
 nix flake check                 # the same, in the Nix sandbox
 ```
 
+`python3 tests/demo.py` opens an isolated tmux with made-up organizations
+(Acme, Globex) and fake accounts: the demo used for the GIF, handy to try ws
+without touching your setup (`prefix + d` exits and deletes everything).
+
 Each test builds an isolated world ([`tests/mundo.py`](tests/mundo.py)): a
 temporary `HOME`, fake GitHub and Claude accounts, a fake Keychain, git repos
 with remotes from made-up orgs and its own tmux server. `claude`, `gh`,
