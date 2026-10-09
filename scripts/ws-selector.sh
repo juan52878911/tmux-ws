@@ -25,11 +25,12 @@ if [[ "$sesion" == "$pf"* && -n "$(tmux show -gqv @ws-float-script)" ]]; then
 fi
 
 opt() { local v; v=$(tmux show -gqv "$1"); echo "${v:-$2}"; }
-titulo=$(opt @ws-title-menu " sesiones "); [[ "$orden" == nueva ]] && titulo=$(opt @ws-title-new " nueva sesion ")
+titulo=$(opt @ws-title-menu "$("$ws" i18n title_menu)")
+[[ "$orden" == nueva ]] && titulo=$(opt @ws-title-new "$("$ws" i18n title_new)")
 estilo=()
 [[ -n "$(opt @ws-popup-style "")" ]] && estilo+=(-s "$(opt @ws-popup-style "")")
 [[ -n "$(opt @ws-popup-border-style "")" ]] && estilo+=(-S "$(opt @ws-popup-border-style "")")
 tmux display-popup -c "$cliente" -E -w "$(opt @ws-popup-width 90%)" -h "$(opt @ws-popup-height 85%)" \
   "${estilo[@]}" -T "$titulo" -d "$ruta" \
   "WS_CLIENTE='$cliente' WS_ORIGEN='$sesion' WS_DESDE_FLOTANTE=$desde_flotante '$ws' $orden '$ruta' \
-   || { printf '\nws terminó con error. Pulsa una tecla para cerrar…'; read -rn1; }"
+   || { printf '\n%s' \"\$('$ws' i18n error_close)\"; read -rn1; }"

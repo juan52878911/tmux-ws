@@ -16,6 +16,8 @@ Configuración: ~/.config/ws/ws.toml. Estado generado: ~/.local/state/ws/.
 """
 import json
 import os
+import contextlib
+import fcntl
 import re
 import shlex
 import shutil
@@ -23,6 +25,8 @@ import subprocess
 import sys
 import tomllib
 from pathlib import Path
+
+from i18n import t
 
 HOME = Path.home()
 CONFIG = Path(os.environ.get("WS_CONFIG", HOME / ".config/ws/ws.toml"))
@@ -268,10 +272,29 @@ def script_navegador(modo):
 # ─── Generación ──────────────────────────────────────────────────────────────
 
 def _escribir(ruta, contenido):
+    """Escritura atómica (temporal + rename): otro proceso nunca lee un archivo a medias."""
+    if ruta.is_symlink():  # p. ej. ws.toml enlazado desde tus dotfiles: escribir en el destino
+        ruta = ruta.resolve()
     ruta.parent.mkdir(parents=True, exist_ok=True)
     texto = contenido if isinstance(contenido, str) else json.dumps(contenido, indent=2, ensure_ascii=False) + "\n"
-    if not ruta.exists() or ruta.read_text() != texto:
-        ruta.write_text(texto)
+    if ruta.exists() and ruta.read_text() == texto:
+        return
+    tmp = ruta.with_name(f".{ruta.name}.{os.getpid()}.tmp")
+    tmp.write_text(texto)
+    os.replace(tmp, ruta)
+
+
+@contextlib.contextmanager
+def cerrojo():
+    """Exclusión entre procesos de ws para todo lo que escribe en ws.toml.
+    Varios shims pueden arrancar a la vez (tmux restaurando panes, scripts)."""
+    ESTADO.mkdir(parents=True, exist_ok=True)
+    with open(ESTADO / ".lock", "w") as f:
+        fcntl.flock(f, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(f, fcntl.LOCK_UN)
 
 
 def _cmd(mcp):
@@ -430,6 +453,12 @@ def gitconfig(cfg):
     lugar de osxkeychain. Funciona en cualquier terminal, sin direnv.
     """
     bloques = ["# Generado por ws a partir de ws.toml. No editar.\n"]
+    # Fuera de las carpetas de las organizaciones, github.com también pasa por
+    # ws (cuenta por el dueño del repo en la URL) en vez de por el helper del
+    # sistema, que guarda una sola credencial para todo github.com.
+    if cfg.get("github", {}).get("personal", {}).get("usuario"):
+        bloques.append('[credential "https://github.com"]\n\thelper =\n'
+                       f'\thelper = "!{ws_bin()} git-credential auto"\n\tuseHttpPath = true\n')
 
     def archivo_para(nombre, c):
         lineas = []
@@ -440,7 +469,7 @@ def gitconfig(cfg):
             lineas += ["[core]", f"\tsshCommand = ssh -i {clave} -o IdentitiesOnly=yes"]
         if c["github"] != "personal":
             lineas += ['[credential "https://github.com"]', "\thelper =",
-                       f'\thelper = "!{ws_bin()} git-credential {c["github"]}"']
+                       f'\thelper = "!{ws_bin()} git-credential auto"', "\tuseHttpPath = true"]
         archivo = ESTADO / "git" / f"{nombre}.gitconfig"
         _escribir(archivo, "\n".join(lineas) + "\n")
         return archivo
@@ -462,6 +491,8 @@ def gitconfig(cfg):
 
 def ws_bin():
     """Ruta estable de `ws` para el helper de git (que no siempre hereda el PATH)."""
+    if os.environ.get("WS_BIN"):
+        return os.environ["WS_BIN"]
     usuario = os.environ.get("USER", HOME.name)
     for c in (Path(f"/etc/profiles/per-user/{usuario}/bin/ws"), HOME / ".nix-profile/bin/ws",
               HOME / ".local/bin/ws"):
@@ -470,25 +501,57 @@ def ws_bin():
     return f"{sys.executable} {Path(__file__).resolve()}"
 
 
+def _token_gh(cuenta, usuario):
+    """Token de `usuario` pedido a gh. La cuenta personal usa el GH_CONFIG_DIR
+    de siempre; las demás, el suyo."""
+    env = dict(os.environ)
+    env.pop("GH_CONFIG_DIR", None)
+    if cuenta != "personal":
+        env["GH_CONFIG_DIR"] = str(dir_gh(cuenta))
+    r = subprocess.run([binario_real("gh") or "gh", "auth", "token", "--hostname", "github.com",
+                        "--user", usuario], capture_output=True, text=True, env=env)
+    return r.stdout.strip() if r.returncode == 0 else ""
+
+
+def cuenta_para_url(cfg, datos):
+    """Cuenta de GitHub para una petición de git: por el dueño del repo en la
+    URL (github_orgs de cada grupo, o tu propio usuario); si no, por la carpeta;
+    si no, la personal. Así un clon de una org de empresa usa su cuenta aunque
+    se haga desde cualquier sitio."""
+    dueno = datos.get("path", "").strip("/").split("/")[0].lower()
+    if dueno:
+        for g in grupos(cfg).values():
+            if dueno in [o.lower() for o in g.get("github_orgs", [])]:
+                return credenciales(cfg, g["clave"])["github"]
+        for cuenta, d in cfg.get("github", {}).items():
+            if d.get("usuario", "").lower() == dueno:
+                return cuenta
+    ctx = contexto(cfg, usar_tmux=False)
+    return credenciales(cfg, ctx["grupo"], ctx["proyecto"])["github"] if ctx else "personal"
+
+
 def git_credential(cuenta, accion):
-    """Helper de git para github.com con una cuenta concreta.
+    """Helper de git para github.com: `cuenta` concreta o `auto` (por URL).
 
     No usa `gh auth git-credential`: con un GH_CONFIG_DIR vacío, gh cae al token
     por defecto del Llavero (tu cuenta personal) y el push saldría con ella.
     Aquí se pide el token de ese usuario exacto; si no está, git falla.
+    Tampoco guarda nada (store/erase se ignoran): ws reemplaza a osxkeychain en
+    github.com para que una credencial de una cuenta no tape a las demás.
     """
-    sys.stdin.read()
+    datos = dict(l.split("=", 1) for l in sys.stdin.read().splitlines() if "=" in l)
     if accion != "get":
         return
-    usuario = cargar().get("github", {}).get(cuenta, {}).get("usuario")
+    cfg = cargar()
+    if cuenta == "auto":
+        cuenta = cuenta_para_url(cfg, datos)
+    usuario = cfg.get("github", {}).get(cuenta, {}).get("usuario")
     if not usuario:
-        sys.exit(f"ws: la cuenta de GitHub «{cuenta}» no está conectada (prefix+s, ^g sobre la organización)")
-    env = {**os.environ, "GH_CONFIG_DIR": str(dir_gh(cuenta))}
-    r = subprocess.run([binario_real("gh") or "gh", "auth", "token", "--hostname", "github.com",
-                        "--user", usuario], capture_output=True, text=True, env=env)
-    if r.returncode != 0 or not r.stdout.strip():
-        sys.exit(f"ws: no hay token de {usuario} para «{cuenta}» (prefix+s, ^g sobre la organización)")
-    print(f"username={usuario}\npassword={r.stdout.strip()}")
+        sys.exit(t("err_not_connected", c=cuenta))
+    token = _token_gh(cuenta, usuario)
+    if not token:
+        sys.exit(t("err_no_token", u=usuario, c=cuenta))
+    print(f"username={usuario}\npassword={token}")
 
 
 def registrar_direnv(ruta):
@@ -498,7 +561,10 @@ def registrar_direnv(ruta):
     envrc = ruta / ".envrc"
     if envrc.exists():
         if "use ws" not in envrc.read_text():
-            print(f"ws: {envrc} ya existe y no carga `use ws`; añádelo a mano", file=sys.stderr)
+            print(t("err_envrc", f=envrc), file=sys.stderr)
+        return
+    if not shutil.which("direnv"):  # opcional: sin direnv no hay herramientas por carpeta
+        print(t("err_no_direnv", n=ruta.name), file=sys.stderr)
         return
     envrc.write_text("use ws\n")
     exclude = ruta / ".git/info/exclude"
@@ -557,7 +623,7 @@ def etiquetar(ruta, etiqueta, gestionadas):
 
 
 def etiquetar_todo(cfg):
-    if not MACOS:  # las etiquetas de Finder son cosa de macOS
+    if not MACOS or not shutil.which("xattr"):  # las etiquetas de Finder son cosa de macOS
         return
     marcas = etiquetas_de_grupos(cfg)
     gestionadas = list(marcas.values())
@@ -591,9 +657,15 @@ def _toml_str(v):
     return '"' + str(v).replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
-def registrar_proyecto(grupo, nombre, ruta, **extra):
-    """Añade [proyectos."grupo/nombre"] al final de ws.toml. Devuelve la clave."""
-    clave = f"{grupo}/{re.sub(r'[^a-z0-9]+', '-', nombre.lower()).strip('-')}"
+def registrar_proyecto(grupo, nombre, ruta, cfg=None, **extra):
+    """Añade [proyectos."grupo/nombre"] al final de ws.toml. Devuelve la clave.
+    Llamar dentro de cerrojo(). Si la clave ya existe (otro repo con el mismo
+    nombre), se numera: grupo/nombre-2."""
+    base = f"{grupo}/{re.sub(r'[^a-z0-9]+', '-', nombre.lower()).strip('-')}"
+    existentes = (cfg or cargar()).get("proyectos", {})
+    clave, n = base, 2
+    while clave in existentes:
+        clave, n = f"{base}-{n}", n + 1
     casa = str(HOME)
     ruta = str(ruta)
     datos = {"ruta": "~" + ruta[len(casa):] if ruta.startswith(casa) else ruta, **extra}
@@ -618,8 +690,14 @@ def descubrir(ruta, cfg=None):
         return None
     for g in grupos(cfg).values():
         if dueno in [o.lower() for o in g.get("github_orgs", [])]:
-            clave = registrar_proyecto(g["clave"], Path(top).name, top)
-            sync()
+            with cerrojo():
+                # Releer dentro del cerrojo: otro proceso pudo registrarlo ya.
+                cfg = cargar()
+                for p in proyectos(cfg).values():
+                    if p["ruta"] and _real(p["ruta"]) == _real(top):
+                        return p["clave"]
+                clave = registrar_proyecto(g["clave"], Path(top).name, top, cfg=cfg)
+                sync()
             return clave
     return None
 
@@ -674,6 +752,8 @@ def ejecutar(prog, args):
     real = binario_real(prog)
     if not real:
         sys.exit(f"ws: no encuentro {prog} en el PATH")
+    if os.environ.get("WS_OFF"):  # saltarse ws por completo
+        os.execv(real, [prog, *args])
     cfg = {}
     try:
         cfg = cargar()
@@ -681,16 +761,31 @@ def ejecutar(prog, args):
             cfg = cargar()
         ctx = contexto(cfg)
     except Exception as e:  # una config rota nunca debe dejarte sin claude/gh
-        print(f"ws: {CONFIG}: {e} — sigo en modo normal", file=sys.stderr)
+        print(t("err_config", c=CONFIG, e=e), file=sys.stderr)
         ctx = None
     if not ctx:
         # Normal: el claude de siempre, solo con las reglas deny hacia los demás contextos.
         if prog == "claude" and (not args or args[0] not in SUBCOMANDOS_CLAUDE):
-            normal = ESTADO / "normal-settings.json"
-            _escribir(normal, settings_claude(cfg, None))
-            args = ["--settings", str(normal), *args]
+            try:
+                normal = ESTADO / "normal-settings.json"
+                _escribir(normal, settings_claude(cfg, None))
+                args = ["--settings", str(normal), *args]
+            except Exception as e:  # sin reglas deny, pero con tu claude de siempre
+                print(t("err_deny", e=e), file=sys.stderr)
         os.execv(real, [prog, *args])
 
+    # Con contexto conocido, si algo falla NO se lanza con tu identidad personal:
+    # sería usar la cuenta equivocada justo donde ws debe evitarlo.
+    try:
+        args, env = entorno_de(prog, args, cfg, ctx)
+    except Exception as e:
+        donde = ctx["proyecto"] or ctx["grupo"]
+        sys.exit(t("err_prepare", d=donde, p=prog, e=e))
+    os.execve(real, [prog, *args], env)
+
+
+def entorno_de(prog, args, cfg, ctx):
+    """Argumentos y entorno con los que se lanza `prog` en el contexto `ctx`."""
     sync_si_hace_falta()
     g = grupos(cfg)[ctx["grupo"]]
     c = credenciales(cfg, ctx["grupo"], ctx["proyecto"])
@@ -730,7 +825,7 @@ def ejecutar(prog, args):
             env["GH_BROWSER"] = nav
     # Variables de la organización/proyecto: para cualquier programa con shim.
     env.update(resolver_env(ef["env"]))
-    os.execve(real, [prog, *args], env)
+    return args, env
 
 
 def direnv():
@@ -772,13 +867,13 @@ def apply(sesion):
 # ─── Diagnóstico ─────────────────────────────────────────────────────────────
 
 REQUISITOS = [  # (programa, versión mínima, obligatorio, para qué)
-    ("tmux", (3, 3), True, "selector en popup"),
-    ("fzf", (0, 62), True, "selector y asistente"),
-    ("git", None, True, "identidad por carpeta"),
-    ("gh", None, False, "cuentas de GitHub por organización"),
-    ("direnv", None, False, "herramientas Nix por proyecto (con nix-direnv)"),
-    ("nix", None, False, "herramientas Nix por proyecto"),
-    ("security" if sys.platform == "darwin" else "secret-tool", None, False, "secretos (${NOMBRE})"),
+    ("tmux", (3, 3), True, "popup selector"),
+    ("fzf", (0, 62), True, "selector and wizard"),
+    ("git", None, True, "per-folder identity"),
+    ("gh", None, False, "per-organization GitHub accounts"),
+    ("direnv", None, False, "per-project Nix tools (with nix-direnv)"),
+    ("nix", None, False, "per-project Nix tools"),
+    ("security" if sys.platform == "darwin" else "secret-tool", None, False, "secrets (${NAME})"),
 ]
 
 
@@ -801,31 +896,31 @@ def doctor():
     for prog, minimo, obligatorio, uso in REQUISITOS:
         ruta = shutil.which(prog)
         if not ruta:
-            print(f"{mal if obligatorio else opc} {prog}: no está  ({uso})")
+            print(f"{mal if obligatorio else opc} {prog}: {t('d_missing')}  ({uso})")
             fallos += obligatorio
             continue
         ver = _version(prog) if minimo else None
         if minimo and ver and ver < minimo:
-            print(f"{mal} {prog} {'.'.join(map(str, ver))}: hace falta ≥ {'.'.join(map(str, minimo))}  ({uso})")
+            print(f"{mal} {prog} {'.'.join(map(str, ver))}: {t('d_need', v='.'.join(map(str, minimo)))}  ({uso})")
             fallos += obligatorio
         else:
             extra = f" {'.'.join(map(str, ver))}" if ver else ""
             print(f"{ok_} {prog}{extra}")
     try:
         cfg = cargar()
-        print(f"{ok_ if cfg else opc} config {CONFIG}" + ("" if cfg else "  (no existe: parte de examples/ws.toml)"))
+        print(f"{ok_ if cfg else opc} config {CONFIG}" + ("" if cfg else f"  {t('d_config_missing')}"))
     except Exception as e:
         print(f"{mal} config {CONFIG}: {e}")
         fallos += 1
     for prog in ("claude", "gh", "opencode"):
         primero = shutil.which(prog)
         if primero and _real(Path(primero).parent) == _real(SHIMS):
-            print(f"{ok_} {prog} pasa por ws")
+            print(f"{ok_} {t('d_through', p=prog)}")
         elif (SHIMS / prog).exists():
-            print(f"{opc} {prog}: el shim existe pero {SHIMS} no va primero en el PATH")
+            print(f"{opc} {t('d_shim_not_first', p=prog, d=SHIMS)}")
     gitcfg = subprocess.run(["git", "config", "--global", "--get-all", "include.path"],
                             capture_output=True, text=True).stdout
-    print(f"{ok_ if 'state/ws/gitconfig' in gitcfg else opc} ~/.gitconfig incluye ~/.local/state/ws/gitconfig")
+    print(f"{ok_ if 'state/ws/gitconfig' in gitcfg else opc} {t('d_gitconfig')}")
     return 1 if fallos else 0
 
 
@@ -847,6 +942,8 @@ def main():
         direnv()
     elif orden == "sync":
         sync()
+    elif orden == "i18n" and resto:  # texto traducido, para los scripts de shell
+        print(t(resto[0]))
     elif orden == "doctor":
         sys.exit(doctor())
     elif orden == "descubrir":

@@ -6,6 +6,10 @@
 # proyecto - quitar. Los secretos nunca van aquí: ${NOMBRE} se lee del Llavero
 # de macOS (servicio "ws/NOMBRE") o de la variable de entorno.
 
+# Idioma de la interfaz: "en" (por defecto) o "es". También: set -g @ws-lang es
+[ui]
+lang = "en"
+
 # nixpkgs de los devShells generados (el módulo de home-manager puede fijarlo).
 [nix]
 nixpkgs = "github:NixOS/nixpkgs/nixpkgs-unstable"

@@ -13,6 +13,7 @@ from pathlib import Path
 import ws
 
 import tema as _tema
+from i18n import idioma, t
 
 # Tema definido en tmux.conf (@ws-color-*, @ws-nerd-font…; ver tema.py).
 TEMA = _tema.Tema()
@@ -25,7 +26,7 @@ NEGRITA, FIN = "\033[1m", "\033[0m"
 # buscador visible: se navega con j/k o las flechas y "/" abre la búsqueda.
 FZF = ["fzf", "--ansi", "--layout=reverse", "--no-sort", "--cycle", "--info=hidden",
        "--no-input", "--border=none", "--no-separator", "--highlight-line",
-       "--padding=1,2,0,1", f"--prompt={TEMA.iconos['search']}  ", "--ghost=buscar…",
+       "--padding=1,2,0,1", f"--prompt={TEMA.iconos['search']}  ", f"--ghost={t('search')}",
        f"--pointer={TEMA.o['pointer']}", "--marker=✓", f"--color={TEMA.fzf()}",
        "--bind", "/:show-input+unbind(j,k,q)",
        "--bind", "esc:transform:[[ $FZF_INPUT_STATE = enabled ]] && echo 'clear-query+hide-input+rebind(j,k,q)' || echo abort",
@@ -147,8 +148,8 @@ def elegir(opciones, cabecera="", multi=False, preview=None, teclas=None, binds=
     if cabecera:
         args += ["--header", cabecera, "--header-first"]
     if pie is None:
-        pie = atajos(("enter", "elegir"), ("tab", "marcar"), ("/", "buscar"), ("esc", "volver")) if multi \
-            else atajos(("enter", "elegir"), ("/", "buscar"), ("esc", "volver"))
+        pie = atajos(("enter", t("k_choose")), ("tab", t("k_mark")), ("/", t("k_search")), ("esc", t("k_back"))) if multi \
+            else atajos(("enter", t("k_choose")), ("/", t("k_search")), ("esc", t("k_back")))
     args += ["--footer", pie]
     if multi:
         args += ["--multi", "--bind", "tab:toggle+down"]
@@ -176,7 +177,20 @@ def limpiar(titulo=None):
 
 
 def confirmar(texto):
-    _, sel = elegir([("no", "No"), ("si", f"Sí, {texto}")], f"¿{texto[0].upper() + texto[1:]}?")
+    """Sí/No con «Sí» primero (Enter confirma) y respuesta de una tecla:
+    y/n en inglés, s/n en español. Esc o q cancelan."""
+    si, no = t("yes_key"), t("no_key")
+    pregunta = texto[0].upper() + texto[1:] + "?"
+    if idioma() == "es":
+        pregunta = "¿" + pregunta
+    tecla, sel = elegir([("si", f"{t('yes')}, {texto}"), ("no", t("no"))], pregunta,
+                        teclas=[si, no],
+                        pie=atajos((si, t("k_yes")), (no, t("k_no")), ("enter", t("k_choose")),
+                                   ("esc", t("k_back"))))
+    if tecla == si:
+        return True
+    if tecla == no:
+        return False
     return sel == ["si"]
 
 
@@ -201,6 +215,11 @@ def toml_str(v):
 
 
 def anadir_seccion(cabecera, datos):
+    with ws.cerrojo():
+        _anadir_seccion(cabecera, datos)
+
+
+def _anadir_seccion(cabecera, datos):
     lineas = [f"\n[{cabecera}]"] + [f"{k} = {toml_str(v)}" for k, v in datos.items() if v not in (None, "", [])]
     with open(ws.CONFIG, "a") as f:
         f.write("\n".join(lineas) + "\n")
@@ -208,10 +227,15 @@ def anadir_seccion(cabecera, datos):
 
 def poner_campo(cabecera, campo, valor):
     """Fija campo = valor dentro de [cabecera], conservando el resto del archivo."""
+    with ws.cerrojo():
+        _poner_campo(cabecera, campo, valor)
+
+
+def _poner_campo(cabecera, campo, valor):
     texto = ws.CONFIG.read_text()
     m = re.search(rf"^\[{re.escape(cabecera)}\]\s*$", texto, re.M)
     if not m:
-        anadir_seccion(cabecera, {campo: valor})
+        _anadir_seccion(cabecera, {campo: valor})
         return
     fin = re.search(r"^\[", texto[m.end():], re.M)
     fin = m.end() + fin.start() if fin else len(texto)
@@ -222,7 +246,7 @@ def poner_campo(cabecera, campo, valor):
         seccion = re.sub(patron, lambda _: linea, seccion, count=1, flags=re.M)
     else:
         seccion = "\n" + linea + seccion
-    ws.CONFIG.write_text(texto[:m.end()] + seccion + texto[fin:])
+    ws._escribir(ws.CONFIG, texto[:m.end()] + seccion + texto[fin:])
 
 
 # ─── Cuentas ─────────────────────────────────────────────────────────────────
@@ -244,13 +268,13 @@ def conectar_github(cuenta):
     if nav:
         env["GH_BROWSER"] = nav
     gh = ws.binario_real("gh") or "gh"
-    limpiar(f"Conectar GitHub «{cuenta}»")
-    print(f"  Se abrirá una ventana de incógnito.")
-    print(f"  {SECUNDARIO}Entra con la cuenta de la organización, pega el código que muestra gh y autoriza.{FIN}\n")
+    limpiar(t("connect_title", c=cuenta))
+    print(f"  {t('connect_1')}")
+    print(f"  {SECUNDARIO}{t('connect_2')}{FIN}\n")
     r = subprocess.run([gh, "auth", "login", "--web", "--hostname", "github.com",
                         "--git-protocol", "https", "--insecure-storage", "--skip-ssh-key"], env=env)
     if r.returncode != 0:
-        input("\nNo se completó el login. Enter para volver…")
+        input(f"\n{t('login_failed')}")
         return None
     usuario = subprocess.run([gh, "api", "user", "-q", ".login"], env=env,
                              capture_output=True, text=True).stdout.strip()
@@ -259,14 +283,14 @@ def conectar_github(cuenta):
         if "navegador" not in datos:
             poner_campo(f"github.{cuenta}", "navegador", "incognito")
         ws.sync()
-        print(f"\n{ACTIVO}✓ {cuenta} conectada como {usuario}{FIN}")
+        print(f"\n{ACTIVO}{t('connected_as', c=cuenta, u=usuario)}{FIN}")
     return usuario
 
 
 def comprobar_github(cfg, grupo):
     cuenta = ws.credenciales(cfg, grupo)["github"]
     if cuenta != "personal" and not cfg.get("github", {}).get(cuenta, {}).get("usuario"):
-        if confirmar(f"conectar ahora la cuenta de GitHub «{cuenta}»"):
+        if confirmar(t("connect_now", c=cuenta)):
             limpiar()
             conectar_github(cuenta)
 
@@ -303,7 +327,7 @@ def lineas_menu(cfg):
     def cabecera(tipo, nombre, info=""):
         return f"{ACENTO}{NEGRITA}{icono(tipo)}{nombre}{FIN}" + (f"   {TENUE}{info}{FIN}" if info else "")
 
-    filas.append(("h:normal", cabecera("normal", "Normal")))
+    filas.append(("h:normal", cabecera("normal", t("normal"))))
     for s, marca in abiertas.items():
         if not marca or marca.split("/")[0] not in gs:
             filas.append((f"s:{s}", item(s, s)))
@@ -312,9 +336,10 @@ def lineas_menu(cfg):
     for g in gs.values():
         c = ws.credenciales(cfg, g["clave"])
         cuenta = c["github"]
-        usuario = "personal" if cuenta == "personal" else \
-            (cfg.get("github", {}).get(cuenta, {}).get("usuario") or "sin conectar")
-        info = f"{TEMA.iconos['github']} {usuario}  ·  claude {c['claude']}"
+        usuario = t("personal") if cuenta == "personal" else \
+            (cfg.get("github", {}).get(cuenta, {}).get("usuario") or t("not_connected"))
+        claude = t("own") if c["claude"] == "propia" else t("personal")
+        info = f"{TEMA.iconos['github']} {usuario}  ·  claude {claude}"
         filas.append((f"g:{g['clave']}", cabecera(g["tipo"], g.get("nombre", g["clave"]), info)))
         for p in ps.values():
             if p["grupo"] != g["clave"]:
@@ -355,9 +380,9 @@ def preview(clave):
         print(tmux("capture-pane", "-ep", "-t", f"={sesion}:", salida=True))
         return
     if tipo == "h":
-        print(f"\n {ACENTO}{NEGRITA}Sesión normal{FIN}\n")
-        print(f"  {TEXTO}Tu cuenta personal y tus MCPs de siempre.{FIN}")
-        print(f"\n  {SECUNDARIO}enter{FIN} {TEXTO}crear una sesión normal{FIN}")
+        print(f"\n {ACENTO}{NEGRITA}{t('p_normal_title')}{FIN}\n")
+        print(f"  {TEXTO}{t('p_normal_text')}{FIN}")
+        print(f"\n  {SECUNDARIO}enter{FIN} {TEXTO}{t('p_normal_enter')}{FIN}")
         return
     if tipo in ("p", "g"):
         grupo = valor.split("/")[0]
@@ -369,17 +394,18 @@ def preview(clave):
         print(f"\n {ACENTO}{NEGRITA}{titulo}{FIN}" + (f"   {SECUNDARIO}{g.get('nombre', grupo)}{FIN}" if proyecto else "") + "\n")
         if proyecto:
             ruta = str(ws.proyectos(cfg)[valor]["ruta"]).replace(str(Path.home()), "~", 1)
-            _dato("carpeta", ruta)
-        _dato("github", c["github"])
-        _dato("claude", c["claude"] + (f" · {ef['claude_motor']}" if ef["claude_motor"] != "anthropic" else ""))
-        _dato("correo git", c["git_correo"] or "el de siempre")
+            _dato(t("p_folder"), ruta)
+        claude = t("own") if c["claude"] == "propia" else t("personal")
+        _dato(t("p_github"), t("personal") if c["github"] == "personal" else c["github"])
+        _dato(t("p_claude"), claude + (f" · {ef['claude_motor']}" if ef["claude_motor"] != "anthropic" else ""))
+        _dato(t("p_email"), c["git_correo"] or t("p_same_email"))
         print()
-        _dato("bloques", ", ".join(ef["bloques"]) or "—")
-        _dato("mcps", ", ".join(ef["mcps"]) or "—")
-        _dato("agentes", ", ".join(ef["agentes"]) or "—")
-        _dato("herramientas", ", ".join(ef["herramientas"]) or "las del Mac")
-        accion = "abrir la sesión" if proyecto else "nueva sesión aquí"
-        print(f"\n  {SECUNDARIO}enter{FIN} {TEXTO}{accion}{FIN}" + ("" if proyecto else f"   {SECUNDARIO}^g{FIN} {TEXTO}conectar GitHub{FIN}"))
+        _dato(t("p_blocks"), ", ".join(ef["bloques"]) or "—")
+        _dato(t("p_mcps"), ", ".join(ef["mcps"]) or "—")
+        _dato(t("p_agents"), ", ".join(ef["agentes"]) or "—")
+        _dato(t("p_tools"), ", ".join(ef["herramientas"]) or t("p_host_tools"))
+        accion = t("p_open") if proyecto else t("p_new_here")
+        print(f"\n  {SECUNDARIO}enter{FIN} {TEXTO}{accion}{FIN}" + ("" if proyecto else f"   {SECUNDARIO}^g{FIN} {TEXTO}{t('p_connect')}{FIN}"))
 
 
 def _yo():
@@ -415,7 +441,7 @@ def accion_propia(cfg, clave, nombre):
     limpiar()
     subprocess.run(a["cmd"], shell=True, env=env, cwd=ruta or None)
     if a.get("pausa", False):
-        input(f"\n  {SECUNDARIO}Enter para volver…{FIN}")
+        input(f"\n  {SECUNDARIO}{t('enter_back')}{FIN}")
 
 
 def accion(nombre, clave="", extra=""):
@@ -428,11 +454,11 @@ def accion(nombre, clave="", extra=""):
     elif nombre == "propia":
         accion_propia(cfg, clave, extra)
     elif nombre == "cerrar" and sesion and tmux("has-session", "-t", f"={sesion}"):
-        if confirmar(f"cerrar la sesión {sesion}"):
+        if confirmar(t("close_session", s=sesion)):
             tmux("kill-session", "-t", f"={sesion}")
     elif nombre == "renombrar" and sesion and tmux("has-session", "-t", f"={sesion}"):
-        limpiar(f"Renombrar {sesion}")
-        nuevo = preguntar("Nuevo nombre", sesion)
+        limpiar(t("rename", s=sesion))
+        nuevo = preguntar(t("new_name"), sesion)
         if nuevo and nuevo != sesion:
             tmux("rename-session", "-t", f"={sesion}", nuevo)
     elif nombre == "editar":
@@ -442,10 +468,10 @@ def accion(nombre, clave="", extra=""):
         cuenta = ws.credenciales(cfg, valor.split("/")[0])["github"]
         limpiar()
         if cuenta == "personal":
-            input(f"  {SECUNDARIO}Esta organización usa tu cuenta personal de GitHub. Enter para volver…{FIN}")
+            input(f"  {SECUNDARIO}{t('uses_personal_gh')}{FIN}")
         else:
             conectar_github(cuenta)
-            input(f"\n  {SECUNDARIO}Enter para volver…{FIN}")
+            input(f"\n  {SECUNDARIO}{t('enter_back')}{FIN}")
 
 
 def descubrir_sesiones():
@@ -475,10 +501,10 @@ def menu():
     propias = [(n, a) for n, a in cfg.get("acciones", {}).items() if a.get("tecla") and a.get("cmd")]
     tecla, claves = elegir(
         lineas_menu(cfg),
-        pie=atajos(("enter", "abrir"), ("^n", "nueva"), ("^x", "cerrar"), ("^r", "renombrar"),
-                   ("^e", "editar"), ("^g", "github"),
+        pie=atajos(("enter", t("k_open")), ("^n", t("k_new")), ("^x", t("k_close")), ("^r", t("k_rename")),
+                   ("^e", t("k_edit")), ("^g", t("k_github")),
                    *[(a["tecla"].replace("ctrl-", "^"), a.get("etiqueta", n)) for n, a in propias],
-                   ("/", "buscar")),
+                   ("/", t("k_search"))),
         preview=f"{yo} preview {{1}}",
         teclas=["ctrl-n"],
         binds=[f"ctrl-x:execute({yo} accion cerrar {{1}})+{recargar}",
@@ -510,15 +536,17 @@ CWD = Path.home()
 
 def describir_bloque(b):
     partes = []
-    for k, etiqueta in (("mcps", "MCPs"), ("agentes", "agentes"), ("herramientas", "❄"), ("permitir", "permisos")):
+    for k, etiqueta in (("mcps", t("blocks_mcps")), ("agentes", t("blocks_agents")),
+                        ("herramientas", t("tools_lbl")), ("permitir", t("blocks_perms"))):
         if b.get(k):
             partes.append(f"{etiqueta}: {' '.join(b[k])}")
     if b.get("claude_motor"):
-        partes.append(f"claude con {b['claude_motor']}")
+        partes.append(t("claude_with", m=b["claude_motor"]))
     return " · ".join(partes)
 
 
-def elegir_bloques(cfg, excluir=(), cabecera="Bloques"):
+def elegir_bloques(cfg, excluir=(), cabecera=None):
+    cabecera = cabecera or t("blocks")
     ops = [(n, f"{n:<11} {SECUNDARIO}{describir_bloque(b)}{FIN}")
            for n, b in cfg.get("bloques", {}).items() if n not in excluir]
     _, sel = elegir(ops, cabecera, multi=True)
@@ -527,31 +555,30 @@ def elegir_bloques(cfg, excluir=(), cabecera="Bloques"):
 
 def crear_grupo(tipo):
     cfg = ws.cargar()
-    titulo = f"Nueva {'organización' if tipo == 'organizacion' else 'entorno'}"
+    titulo = t("new_org") if tipo == "organizacion" else t("new_env")
     limpiar(titulo)
-    nombre = preguntar("Nombre")
+    nombre = preguntar(t("name"))
     if not nombre:
         return None
     clave = slug(nombre)
-    datos = {"nombre": nombre, "prefijo": preguntar("Prefijo de sus sesiones", clave[:2]),
-             "raiz": preguntar("Carpeta de sus proyectos", f"~/Orgs/{nombre}")}
+    datos = {"nombre": nombre, "prefijo": preguntar(t("prefix"), clave[:2]),
+             "raiz": preguntar(t("root"), f"~/Orgs/{nombre}")}
     cuenta_nueva = None
     if tipo == "organizacion":
-        ops = [("personal", "Mi cuenta personal de GitHub")]
-        ops += [(c, f"La cuenta «{c}» ({d.get('usuario') or 'sin conectar'})")
+        ops = [("personal", t("gh_personal"))]
+        ops += [(c, t("gh_account", c=c, u=d.get("usuario") or t("not_connected")))
                 for c, d in cfg.get("github", {}).items() if c != "personal"]
-        ops += [("+", "Otra cuenta de GitHub (conectar ahora en incógnito)")]
-        _, sel = elegir(ops, f"GitHub de {nombre}")
+        ops += [("+", t("gh_other"))]
+        _, sel = elegir(ops, t("gh_of", n=nombre))
         datos["github"] = sel[0] if sel else "personal"
         if datos["github"] == "+":
             datos["github"] = cuenta_nueva = clave
-        _, sel = elegir([("personal", "Mi cuenta de Claude"),
-                         ("propia", "Cuenta de Claude de la organización (login e historial aparte)")],
-                        f"Claude en {nombre}")
+        _, sel = elegir([("personal", t("claude_mine")), ("propia", t("claude_org"))],
+                        t("claude_in", n=nombre))
         datos["claude"] = sel[0] if sel else "personal"
         limpiar(f"{titulo}: {nombre}")
-        datos["git_correo"] = preguntar("Correo de los commits (vacío = el de siempre)")
-    datos["bloques"] = elegir_bloques(cfg, cabecera="Bloques de la organización  ·  sin marcar = base") or ["base"]
+        datos["git_correo"] = preguntar(t("commit_email"))
+    datos["bloques"] = elegir_bloques(cfg, cabecera=t("org_blocks")) or ["base"]
     if cuenta_nueva:
         anadir_seccion(f"github.{cuenta_nueva}", {"usuario": "", "navegador": "incognito"})
     seccion = "organizaciones" if tipo == "organizacion" else "entornos"
@@ -576,16 +603,16 @@ def carpetas_conocidas():
 def crear_proyecto(grupo):
     cfg = ws.cargar()
     g = ws.grupos(cfg)[grupo]
-    limpiar(f"Nuevo proyecto en {g.get('nombre', grupo)}")
-    nombre = preguntar("Nombre del proyecto")
+    limpiar(t("new_project_in", g=g.get("nombre", grupo)))
+    nombre = preguntar(t("project_name"))
     if not nombre:
         return
     clave = slug(nombre)
     raiz = ws.expandir(g.get("raiz", f"~/Orgs/{g.get('nombre', grupo)}"))
-    ops = [("nueva", f"Carpeta nueva: {raiz / clave}"),
-           ("existente", "Una carpeta que ya tengo…"),
-           ("aqui", f"La carpeta actual: {CWD}")]
-    _, sel = elegir(ops, "¿Dónde vive?")
+    ops = [("nueva", t("new_folder", r=raiz / clave)),
+           ("existente", t("existing_folder")),
+           ("aqui", t("current_folder", r=CWD))]
+    _, sel = elegir(ops, t("where"))
     if not sel:
         return
     if sel[0] == "nueva":
@@ -593,12 +620,12 @@ def crear_proyecto(grupo):
     elif sel[0] == "aqui":
         ruta = CWD
     else:
-        _, elegida = elegir([(c, c) for c in carpetas_conocidas()], "Carpeta del proyecto")
+        _, elegida = elegir([(c, c) for c in carpetas_conocidas()], t("project_folder"))
         if not elegida:
             return
         ruta = Path(elegida[0])
     extra = elegir_bloques(cfg, excluir=g.get("bloques", []),
-                           cabecera="Bloques extra del proyecto  ·  sin marcar = ninguno")
+                           cabecera=t("extra_blocks"))
     casa = str(Path.home())
     datos = {"ruta": str(ruta).replace(casa, "~", 1) if str(ruta).startswith(casa) else str(ruta),
              "bloques": extra}
@@ -611,12 +638,12 @@ def crear_proyecto(grupo):
 def nueva(grupo=None, normal=False):
     cfg = ws.cargar()
     if not grupo and not normal:
-        ops = [("normal", f"Normal  {SECUNDARIO}como siempre{FIN}")]
+        ops = [("normal", f"{t('normal')}  {SECUNDARIO}{t('normal_as_usual')}{FIN}")]
         for g in ws.grupos(cfg).values():
-            tipo = "organización" if g["tipo"] == "organizacion" else "entorno"
+            tipo = t("organization") if g["tipo"] == "organizacion" else t("environment")
             ops.append((f"g:{g['clave']}", f"{g.get('nombre', g['clave'])}  {SECUNDARIO}{tipo}{FIN}"))
-        ops += [("org+", f"{ACTIVO}＋ nueva organización{FIN}"), ("ent+", f"{ACTIVO}＋ nuevo entorno{FIN}")]
-        _, sel = elegir(ops, "Nueva sesión: ¿normal o dentro de una organización/entorno?")
+        ops += [("org+", f"{ACTIVO}{t('new_org_item')}{FIN}"), ("ent+", f"{ACTIVO}{t('new_env_item')}{FIN}")]
+        _, sel = elegir(ops, t("new_session_q"))
         if not sel:
             return
         if sel[0] == "normal":
@@ -629,8 +656,8 @@ def nueva(grupo=None, normal=False):
         else:
             grupo = sel[0][2:]
     if normal:
-        limpiar("Nueva sesión normal")
-        nombre = preguntar("Nombre de la sesión")
+        limpiar(t("new_normal"))
+        nombre = preguntar(t("session_name"))
         if nombre and not tmux("has-session", "-t", f"={nombre}"):
             tmux("new-session", "-d", "-s", nombre, "-c", str(CWD))
         if nombre:
@@ -641,16 +668,17 @@ def nueva(grupo=None, normal=False):
     cfg = ws.cargar()
     ops = [(f"p:{p['clave']}", f"{p['nombre']}  {SECUNDARIO}{p['ruta']}{FIN}")
            for p in ws.proyectos(cfg).values() if p["grupo"] == grupo]
-    ops += [("nuevo", f"{ACTIVO}＋ nuevo proyecto{FIN}"), ("raiz", f"Sesión suelta en la organización  {SECUNDARIO}sin proyecto{FIN}")]
-    _, sel = elegir(ops, f"{ws.grupos(cfg)[grupo].get('nombre', grupo)}: ¿qué proyecto?")
+    ops += [("nuevo", f"{ACTIVO}{t('new_project_item')}{FIN}"),
+            ("raiz", f"{t('loose_session')}  {SECUNDARIO}{t('no_project')}{FIN}")]
+    _, sel = elegir(ops, t("which_project", g=ws.grupos(cfg)[grupo].get("nombre", grupo)))
     if not sel:
         return
     if sel[0] == "nuevo":
         crear_proyecto(grupo)
     elif sel[0] == "raiz":
         prefijo = ws.grupos(cfg)[grupo].get("prefijo", grupo)
-        limpiar(f"Sesión suelta en {ws.grupos(cfg)[grupo].get('nombre', grupo)}")
-        nombre = preguntar("Nombre de la sesión")
+        limpiar(t("loose_in", g=ws.grupos(cfg)[grupo].get("nombre", grupo)))
+        nombre = preguntar(t("session_name"))
         if nombre:
             abrir(cfg, grupo, nombre=f"{prefijo}-{slug(nombre)}")
     else:

@@ -13,6 +13,18 @@
         default = tmux-ws;
       });
 
+      # nix flake check: las pruebas en un HOME aislado, con cuentas falsas.
+      checks = porSistema (pkgs: {
+        pruebas = pkgs.runCommand "tmux-ws-pruebas" {
+          nativeBuildInputs = with pkgs; [ python3 tmux fzf git ];
+        } ''
+          cp -r ${self}/. src && chmod -R u+w src && cd src
+          export HOME=$TMPDIR/home && mkdir -p $HOME
+          python3 tests/run.py
+          touch $out
+        '';
+      });
+
       homeManagerModules.default = import ./nix/module.nix self;
     };
 }
