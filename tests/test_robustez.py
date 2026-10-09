@@ -164,3 +164,17 @@ class Coste(CasoMundo):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Actualizacion(CasoMundo):
+    def test_otra_version_de_ws_regenera_aunque_las_fechas_no_cambien(self):
+        import os
+        self.ws_ok("sync")
+        sello = self.m.estado(".sync")
+        os.utime(sello, (2_000_000_000, 2_000_000_000))  # sello "más nuevo" que todo
+        gitcfg = self.m.estado("gitconfig")
+        gitcfg.write_text("# viejo\n")
+        sello.write_text(sello.read_text().replace("ws.py", "ws-de-otra-version.py"))
+        os.utime(sello, (2_000_000_000, 2_000_000_000))
+        self.m.run(["gh", "--version"], cwd=self.m.ruta("empresa/api"))
+        self.assertIn("git-credential auto", gitcfg.read_text())

@@ -729,14 +729,21 @@ def sync(cfg=None):
     etiquetar_todo(cfg)
     sello = ESTADO / ".sync"
     sello.parent.mkdir(parents=True, exist_ok=True)
-    sello.write_text(ws_bin())
+    sello.write_text(_firma())
+
+
+def _firma():
+    """Qué ws generó el estado: su ruta estable y la de su código. Con Nix, el
+    código cambia de ruta en cada versión pero conserva la fecha 1970, así que
+    comparar fechas no basta para saber que hay que regenerar."""
+    return f"{ws_bin()}\n{Path(__file__).resolve()}"
 
 
 def sync_si_hace_falta():
     """Regenera si cambió ws.toml, este script o la ruta de `ws` (tras un rebuild)."""
     sello = ESTADO / ".sync"
     fuentes = [CONFIG, Path(__file__)]
-    if (not sello.exists() or sello.read_text() != ws_bin()
+    if (not sello.exists() or sello.read_text() != _firma()
             or any(f.exists() and f.stat().st_mtime > sello.stat().st_mtime for f in fuentes)):
         sync()
 
