@@ -2,6 +2,7 @@
 import os
 import re
 import unittest
+from pathlib import Path
 
 from escenario import CasoMundo
 
@@ -71,6 +72,14 @@ class Descubrir(CasoMundo):
         for _ in range(3):
             self.ws_ok("descubrir", str(ruta))
         self.assertEqual(self.proyectos().count("empresa/svc"), 1)
+
+    def test_clon_en_carpeta_temporal_no_se_registra(self):
+        import tempfile
+        tmp = Path(tempfile.mkdtemp(prefix="scratch-"))
+        self.addCleanup(__import__("shutil").rmtree, tmp, True)
+        ruta = self.m.repo(tmp / "h2", "https://github.com/empresa-co/h2")
+        self.assertEqual(self.ws_ok("descubrir", str(ruta)).stdout.strip(), "")
+        self.assertNotIn("empresa/h2", self.proyectos())
 
     def test_org_desconocida_no_se_registra(self):
         ruta = self.clonar("ajeno", "https://github.com/otra-org/ajeno")

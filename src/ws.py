@@ -684,12 +684,24 @@ def registrar_proyecto(grupo, nombre, ruta, cfg=None, **extra):
     return clave
 
 
+def es_temporal(ruta):
+    """Clones en carpetas temporales fuera de tu HOME (scratchpads, /tmp, $TMPDIR)
+    no se registran: desaparecen y dejarían proyectos fantasma en ws.toml."""
+    import tempfile
+    r = _real(ruta)
+    bases = {_real(b) for b in ("/tmp", "/private/tmp", "/var/folders", "/private/var/folders",
+                                 tempfile.gettempdir(), os.environ.get("TMPDIR") or "/tmp")}
+    if r == _real(HOME) or _real(HOME) in r.parents:
+        return False  # lo que cuelga de tu HOME nunca es temporal
+    return any(r == b or b in r.parents for b in bases)
+
+
 def descubrir(ruta, cfg=None):
     """Registra el repo de `ruta` si pertenece a una org conocida. Devuelve su
     clave de proyecto (nueva o existente) o None."""
     cfg = cfg or cargar()
     top = _git(ruta, "rev-parse", "--show-toplevel")
-    if not top:
+    if not top or es_temporal(top):
         return None
     ctx = contexto(cfg, top, usar_tmux=False)
     if ctx and ctx["proyecto"] and _real(proyectos(cfg)[ctx["proyecto"]]["ruta"]) == _real(top):
