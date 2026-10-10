@@ -37,10 +37,10 @@ class Fallos(CasoMundo):
         self.assertNotIn("CLAUDE_CONFIG_DIR", self.m.ultima("claude")["env"])
 
     def test_dependencias_opcionales_ausentes(self):
-        # Sin direnv ni xattr en el PATH (máquina mínima): nada se rompe.
+        # Sin direnv en el PATH (máquina mínima): nada se rompe.
         import os
         path = ":".join(d for d in os.environ["PATH"].split(":")
-                        if not any(os.path.exists(os.path.join(d, b)) for b in ("direnv", "xattr")))
+                        if not any(os.path.exists(os.path.join(d, b)) for b in ("direnv",)))
         path = f"{self.m.home}/.local/share/ws/shims:{self.m.bin}:{path}"
         r = self.m.ws("sync", PATH=path)
         self.assertEqual(r.returncode, 0, r.stderr)
@@ -105,34 +105,6 @@ class Secretos(CasoMundo):
         self.assertIn('use flake "', r.stdout)
         flake = self.m.estado("p", "lab", "nodo", "flake", "flake.nix").read_text()
         self.assertIn("pkgs.nodejs_24", flake)
-
-
-@unittest.skipUnless(sys.platform == "darwin" and __import__("shutil").which("xattr"),
-                     "etiquetas de Finder: solo macOS con xattr")
-class Etiquetas(CasoMundo):
-    def etiquetas(self, ruta):
-        pre = f"import sys; sys.path.insert(0, {str(RAIZ / 'src')!r}); import ws\n"
-        r = self.m.run([sys.executable, "-c", pre + f"print(ws.leer_etiquetas({str(ruta)!r}))"])
-        return r.stdout.strip()
-
-    def test_cada_org_etiqueta_sus_carpetas_y_respeta_las_tuyas(self):
-        import plistlib
-        import subprocess
-        crm = self.m.ruta("aura/crm")
-        propia = plistlib.dumps(["Mía\n0"], fmt=plistlib.FMT_BINARY).hex()
-        subprocess.run(["xattr", "-wx", "com.apple.metadata:_kMDItemUserTags", propia, str(crm)], check=True)
-        self.ws_ok("sync")
-        self.assertIn("Aura", self.etiquetas(crm))
-        self.assertIn("Mía", self.etiquetas(crm))
-        # cambia de organización: se va la etiqueta vieja, se queda la tuya
-        self.m.cfg["proyectos"]["empresa/crm"] = self.m.cfg["proyectos"].pop("aura/crm")
-        self.m.cfg["proyectos"].pop("aura/web")
-        self.m.escribir()
-        self.ws_ok("sync")
-        t = self.etiquetas(crm)
-        self.assertIn("Empresa", t)
-        self.assertNotIn("Aura", t)
-        self.assertIn("Mía", t)
 
 
 class Coste(CasoMundo):

@@ -168,12 +168,12 @@ def efectiva(cfg, ctx):
     return res
 
 
-def resolver_env(env):
-    """Expande ${SECRETO} en los valores con el Llavero/libsecret/entorno."""
+def resolver_env(env, cfg):
+    """Expande ${SECRETO} en los valores con [secretos].comando o el entorno."""
     salida = {}
     for k, v in env.items():
         v = os.path.expanduser(str(v))
-        salida[k] = VAR.sub(lambda m: secreto(m.group(1)) or "", v)
+        salida[k] = VAR.sub(lambda m: secreto(m.group(1), cfg) or "", v)
     return salida
 
 
@@ -196,26 +196,22 @@ def dir_estado(ctx):
     return ESTADO / "p" / ctx["grupo"] / (ctx["proyecto"] or "_").split("/")[-1]
 
 
-# ─── Secretos (Llavero) ──────────────────────────────────────────────────────
+# ─── Secretos ────────────────────────────────────────────────────────────────
+# ws no sabe dónde guardas los secretos: [secretos].comando es la orden que
+# imprime uno ({nombre} = su nombre), p. ej. la del Llavero de macOS o la de
+# libsecret. Sin comando, o si no lo encuentra, se usa la variable de entorno.
 
 VAR = re.compile(r"\$\{([A-Z0-9_]+)\}")
 
 
-MACOS = sys.platform == "darwin"
-
-
-def secreto(nombre):
-    """Lee ws/<nombre> del Llavero de macOS o, en Linux, de libsecret
-    (secret-tool, atributo service=ws/<nombre>); si no está, del entorno."""
-    if MACOS:
-        orden = ["security", "find-generic-password", "-s", f"ws/{nombre}", "-w"]
-    else:
-        orden = ["secret-tool", "lookup", "service", f"ws/{nombre}"]
-    try:
-        r = subprocess.run(orden, capture_output=True, text=True)
-    except FileNotFoundError:
-        return os.environ.get(nombre)
-    return r.stdout.strip() if r.returncode == 0 and r.stdout.strip() else os.environ.get(nombre)
+def secreto(nombre, cfg=None):
+    comando = (cfg if cfg is not None else cargar()).get("secretos", {}).get("comando")
+    if comando:
+        orden = comando.replace("{nombre}", shlex.quote(nombre))
+        r = subprocess.run(orden, shell=True, capture_output=True, text=True)
+        if r.returncode == 0 and r.stdout.strip():
+            return r.stdout.strip()
+    return os.environ.get(nombre)
 
 
 def variables_en(obj):
@@ -224,47 +220,19 @@ def variables_en(obj):
 
 # ─── Navegador para logins (gh, claude) ──────────────────────────────────────
 
-def perfil_chrome(nombre):
-    estado = (HOME / "Library/Application Support/Google/Chrome/Local State" if MACOS
-              else HOME / ".config/google-chrome/Local State")
-    try:
-        info = json.loads(estado.read_text())["profile"]["info_cache"]
-    except (OSError, KeyError, ValueError):
-        return None
-    for directorio, datos in info.items():
-        if datos.get("name") == nombre:
-            return directorio
-    return None
-
-
-def script_navegador(modo):
-    """Ejecutable que abre una URL en incógnito o en un perfil de Chrome.
+def script_navegador(cfg, nombre):
+    """Ejecutable que abre una URL con el navegador `nombre` de [navegadores].
 
     gh (GH_BROWSER) y claude (BROWSER) llaman a un programa con la URL como
-    argumento; así el login de otra cuenta no toca tu sesión personal.
+    argumento; con un navegador aparte (incógnito, otro perfil) el login de otra
+    cuenta no toca tu sesión personal. Sin navegador, el del sistema.
     """
-    if not modo or modo == "normal":
+    orden = cfg.get("navegadores", {}).get(nombre or "")
+    if not orden:
         return None
-    if modo == "incognito":
-        extra = "--incognito"
-    elif modo.startswith("chrome:"):
-        directorio = perfil_chrome(modo.split(":", 1)[1]) or "Default"
-        extra = f"--profile-directory='{directorio}'"
-    elif modo == "firefox-private":
-        extra = None
-    else:
-        return None
-    if modo == "firefox-private":
-        orden = 'open -na Firefox --args --private-window "$@"' if MACOS else 'exec firefox --private-window "$@"'
-    elif MACOS:
-        orden = f'exec open -na "Google Chrome" --args {extra} "$@"'
-    else:
-        chrome = next((b for b in ("google-chrome", "google-chrome-stable", "chromium", "chromium-browser")
-                       if shutil.which(b)), "google-chrome")
-        orden = f'exec {chrome} {extra} "$@"'
-    destino = ESTADO / "bin" / ("navegador-" + re.sub(r"[^a-zA-Z0-9]+", "-", modo))
+    destino = ESTADO / "bin" / ("navegador-" + re.sub(r"[^a-zA-Z0-9]+", "-", nombre))
     destino.parent.mkdir(parents=True, exist_ok=True)
-    destino.write_text(f'#!/bin/sh\n{orden}\n')
+    destino.write_text(f'#!/bin/sh\nexec {orden} "$@"\n')
     destino.chmod(0o755)
     return str(destino)
 
@@ -351,7 +319,7 @@ def reglas_deny(cfg, ctx):
     el caso realista: un agente que lee lo que no es suyo por accidente."""
     c = credenciales(cfg, ctx["grupo"], ctx["proyecto"]) if ctx else {"github": "personal", "claude": "personal"}
     claude_propio = ctx["grupo"] if ctx and c["claude"] == "propia" else None
-    deny = list(DENY_SIEMPRE)
+    deny = DENY_SIEMPRE + cfg.get("secretos", {}).get("deny", [])
     for cuenta in cfg.get("github", {}):
         if cuenta not in ("personal", c["github"]):
             deny.append(f"Read(~/.local/state/ws/gh/{cuenta}/**)")
@@ -585,65 +553,6 @@ def registrar_direnv(ruta):
     subprocess.run(["direnv", "allow", str(ruta)], capture_output=True)
 
 
-# ─── Etiquetas de Finder ─────────────────────────────────────────────────────
-# Cada organización/entorno marca sus carpetas con una etiqueta de color:
-# se ve en Finder y se busca con Spotlight (tag:<Organización>). Configurable con
-# `etiqueta` y `color` en el grupo; por defecto, su nombre y un color por orden.
-
-COLORES = {"ninguno": 0, "gris": 1, "verde": 2, "morado": 3, "azul": 4,
-           "amarillo": 5, "rojo": 6, "naranja": 7}
-POR_DEFECTO = ["azul", "verde", "morado", "naranja", "amarillo", "rojo", "gris"]
-ATRIBUTO = "com.apple.metadata:_kMDItemUserTags"
-
-
-def etiquetas_de_grupos(cfg):
-    res = {}
-    for i, g in enumerate(grupos(cfg).values()):
-        if g.get("etiqueta") is False:
-            continue
-        color = g.get("color", POR_DEFECTO[i % len(POR_DEFECTO)])
-        res[g["clave"]] = (g.get("etiqueta") or g.get("nombre") or g["clave"], COLORES.get(color, 0))
-    return res
-
-
-def leer_etiquetas(ruta):
-    import plistlib
-    r = subprocess.run(["xattr", "-px", ATRIBUTO, str(ruta)], capture_output=True, text=True)
-    if r.returncode != 0:
-        return []
-    try:
-        return plistlib.loads(bytes.fromhex(r.stdout.replace(" ", "").replace("\n", "")))
-    except Exception:
-        return []
-
-
-def etiquetar(ruta, etiqueta, gestionadas):
-    """Pone la etiqueta del grupo y quita las de otros grupos; respeta las tuyas."""
-    import plistlib
-    if not ruta or not ruta.exists():
-        return
-    actuales = leer_etiquetas(ruta)
-    nombres_ws = {n for n, _ in gestionadas}
-    nuevas = [t for t in actuales if t.split("\n")[0] not in nombres_ws]
-    nuevas.append(f"{etiqueta[0]}\n{etiqueta[1]}")
-    if nuevas != actuales:
-        datos = plistlib.dumps(nuevas, fmt=plistlib.FMT_BINARY).hex()
-        subprocess.run(["xattr", "-wx", ATRIBUTO, datos, str(ruta)], capture_output=True)
-
-
-def etiquetar_todo(cfg):
-    if not MACOS or not shutil.which("xattr"):  # las etiquetas de Finder son cosa de macOS
-        return
-    marcas = etiquetas_de_grupos(cfg)
-    gestionadas = list(marcas.values())
-    for g in grupos(cfg).values():
-        if g["clave"] in marcas and g.get("raiz"):
-            etiquetar(expandir(g["raiz"]), marcas[g["clave"]], gestionadas)
-    for pr in proyectos(cfg).values():
-        if pr["grupo"] in marcas:
-            etiquetar(pr["ruta"], marcas[pr["grupo"]], gestionadas)
-
-
 # ─── Autodescubrimiento ──────────────────────────────────────────────────────
 # Un repo cuyo remoto es de una org de GitHub listada en `github_orgs` de un
 # grupo se registra solo como proyecto de ese grupo (al entrar en él con cd, al
@@ -747,7 +656,6 @@ def sync(cfg=None):
         ef, _ = preparar_proyecto(cfg, {"grupo": p["grupo"], "proyecto": p["clave"]})
         if ef["herramientas"]:
             registrar_direnv(p["ruta"])
-    etiquetar_todo(cfg)
     sello = ESTADO / ".sync"
     sello.parent.mkdir(parents=True, exist_ok=True)
     sello.write_text(_firma())
@@ -825,17 +733,17 @@ def entorno_de(prog, args, cfg, ctx):
     if prog == "claude":
         if c["claude"] == "propia":
             env["CLAUDE_CONFIG_DIR"] = str(preparar_claude(cfg, g))
-            nav = script_navegador(c["navegador"] or "incognito")
+            nav = script_navegador(cfg, c["navegador"] or "incognito")
             if nav:
                 env["BROWSER"] = nav
         for v in variables_en(mcps_claude(cfg, ef["mcps"])):
-            if (s := secreto(v)):
+            if (s := secreto(v, cfg)):
                 env[v] = s
         motor = cfg.get("motores", {}).get(ef["claude_motor"])
         if motor:
             env["ANTHROPIC_BASE_URL"] = motor["url"]
             env["ANTHROPIC_MODEL"] = env["ANTHROPIC_SMALL_FAST_MODEL"] = motor["modelo"]
-            if (s := secreto(motor["token"])):
+            if (s := secreto(motor["token"], cfg)):
                 env["ANTHROPIC_AUTH_TOKEN"] = s
         if not args or args[0] not in SUBCOMANDOS_CLAUDE:
             args = ["--mcp-config", str(d / "mcp.json"), "--strict-mcp-config",
@@ -843,16 +751,16 @@ def entorno_de(prog, args, cfg, ctx):
     elif prog == "opencode":
         env["OPENCODE_CONFIG"] = str(d / "opencode.json")
         for v in variables_en(mcps_claude(cfg, ef["mcps"])):
-            if (s := secreto(v)):
+            if (s := secreto(v, cfg)):
                 env[v] = s
 
     if prog in ("gh", "claude", "opencode") and cuenta != "personal":
         env["GH_CONFIG_DIR"] = str(dir_gh(cuenta))
-        nav = script_navegador(cfg.get("github", {}).get(cuenta, {}).get("navegador", "incognito"))
+        nav = script_navegador(cfg, cfg.get("github", {}).get(cuenta, {}).get("navegador", "incognito"))
         if nav:
             env["GH_BROWSER"] = nav
     # Variables de la organización/proyecto: para cualquier programa con shim.
-    env.update(resolver_env(ef["env"]))
+    env.update(resolver_env(ef["env"], cfg))
     return args, env
 
 
@@ -901,7 +809,6 @@ REQUISITOS = [  # (programa, versión mínima, obligatorio, para qué)
     ("gh", None, False, "per-organization GitHub accounts"),
     ("direnv", None, False, "per-project Nix tools (with nix-direnv)"),
     ("nix", None, False, "per-project Nix tools"),
-    ("security" if sys.platform == "darwin" else "secret-tool", None, False, "secrets (${NAME})"),
 ]
 
 
@@ -940,6 +847,14 @@ def doctor():
     except Exception as e:
         print(f"{mal} config {CONFIG}: {e}")
         fallos += 1
+        cfg = {}
+    comando = cfg.get("secretos", {}).get("comando")
+    if comando:
+        prog = shlex.split(comando)[0]
+        print(f"{ok_ if shutil.which(prog) else mal} {t('d_secrets', p=prog)}")
+        fallos += not shutil.which(prog)
+    else:
+        print(f"{opc} {t('d_secrets_env')}")
     for prog in ("claude", "gh", "opencode"):
         primero = shutil.which(prog)
         if primero and _real(Path(primero).parent) == _real(SHIMS):

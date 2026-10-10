@@ -254,8 +254,8 @@ def _poner_campo(cabecera, campo, valor):
 def conectar_github(cuenta):
     """Login web de gh para una cuenta que no es la personal.
 
-    La página se abre en incógnito (o en el perfil de Chrome configurado), así
-    que tu sesión personal del navegador no interviene. El token se guarda en
+    La página se abre con el navegador de la cuenta ([navegadores], por defecto
+    "incognito" si lo defines), así que tu sesión personal no interviene. El token se guarda en
     el hosts.yml de su GH_CONFIG_DIR (--insecure-storage, chmod 600): en el
     Llavero compartiría la entrada por defecto con tu cuenta personal.
     """
@@ -264,7 +264,7 @@ def conectar_github(cuenta):
     d = ws.dir_gh(cuenta)
     d.mkdir(parents=True, exist_ok=True)
     env = {**os.environ, "GH_CONFIG_DIR": str(d)}
-    nav = ws.script_navegador(datos.get("navegador", "incognito"))
+    nav = ws.script_navegador(cfg, datos.get("navegador", "incognito"))
     if nav:
         env["GH_BROWSER"] = nav
     gh = ws.binario_real("gh") or "gh"

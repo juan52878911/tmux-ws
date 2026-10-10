@@ -3,8 +3,8 @@
 # Contexto de un comando = proyecto cuya carpeta contiene la actual; si no, la
 # raíz de una organización; si no, la organización de la sesión de tmux; si no,
 # Normal (todo como siempre). Configuración = bloques del grupo + los del
-# proyecto - quitar. Los secretos nunca van aquí: ${NOMBRE} se lee del Llavero
-# de macOS (servicio "ws/NOMBRE") o de la variable de entorno.
+# proyecto - quitar. Los secretos nunca van aquí: ${NOMBRE} se lee con
+# [secretos].comando o de la variable de entorno.
 
 # Idioma de la interfaz: "en" (por defecto) o "es". También: set -g @ws-lang es
 [ui]
@@ -13,6 +13,21 @@ lang = "en"
 # nixpkgs de los devShells generados (el módulo de home-manager puede fijarlo).
 [nix]
 nixpkgs = "github:NixOS/nixpkgs/nixpkgs-unstable"
+
+# ─── Secretos y navegadores ──────────────────────────────────────────────────
+# ws no sabe dónde guardas los secretos ni qué navegador usas: son órdenes tuyas.
+# comando imprime el secreto {nombre}. deny: reglas de Claude extra para que un
+# agente no lea tu almacén por Bash (las del Llavero y gh ya van siempre).
+[secretos]
+comando = "security find-generic-password -s ws/{nombre} -w"   # Llavero de macOS
+# comando = "secret-tool lookup service ws/{nombre}"           # libsecret (Linux)
+# deny = ["Bash(secret-tool lookup:*)"]
+
+# Navegadores para los logins web (reciben la URL). Una cuenta elige uno con
+# `navegador`; por defecto "incognito". Sin definir, el del sistema.
+[navegadores]
+incognito = "open -na 'Google Chrome' --args --incognito"
+# trabajo = "open -na 'Google Chrome' --args --profile-directory='Profile 1'"
 
 # ─── Cuentas de GitHub ───────────────────────────────────────────────────────
 # "personal" es la de siempre (~/.config/gh y el helper de git habitual).
@@ -23,13 +38,11 @@ usuario = "tu-usuario"
 
 [github.empresa]
 usuario = ""
-navegador = "incognito"        # o "chrome:<Nombre del perfil>"
+navegador = "incognito"        # un nombre de [navegadores]
 
 # ─── Organizaciones ──────────────────────────────────────────────────────────
 # claude: "personal" o "propia" (login, historial y memoria aparte).
 # github_orgs: orgs de GitHub suyas; un repo clonado de ellas se registra solo.
-# etiqueta / color: etiqueta de Finder (gris, verde, morado, azul, amarillo,
-# rojo, naranja); false la quita.
 [organizaciones.empresa]
 nombre = "Empresa"
 prefijo = "em"
@@ -39,7 +52,6 @@ git_correo = "yo@empresa.com"
 claude = "propia"
 github_orgs = ["empresa-org"]
 bloques = ["base", "opencode"]
-color = "azul"
 
 [organizaciones.cliente]
 nombre = "Cliente"

@@ -72,6 +72,8 @@ TEXTOS = {
         "d_missing": "not found", "d_need": "needs ≥ {v}", "d_config_missing": "(missing: start from examples/ws.toml)",
         "d_through": "{p} goes through ws", "d_shim_not_first": "{p}: the shim exists but {d} is not first in PATH",
         "d_gitconfig": "~/.gitconfig includes ~/.local/state/ws/gitconfig",
+        "d_secrets": "secrets (${{NAME}}) with {p}",
+        "d_secrets_env": "secrets (${NAME}) only from the environment: no [secretos].comando",
     },
     "es": {
         "search": "buscar…", "k_open": "abrir", "k_new": "nueva", "k_close": "cerrar",
@@ -127,6 +129,8 @@ TEXTOS = {
         "d_missing": "no está", "d_need": "hace falta ≥ {v}", "d_config_missing": "(no existe: parte de examples/ws.toml)",
         "d_through": "{p} pasa por ws", "d_shim_not_first": "{p}: el shim existe pero {d} no va primero en el PATH",
         "d_gitconfig": "~/.gitconfig incluye ~/.local/state/ws/gitconfig",
+        "d_secrets": "secretos (${{NOMBRE}}) con {p}",
+        "d_secrets_env": "secretos (${NOMBRE}) solo del entorno: no hay [secretos].comando",
     },
 }
 

@@ -30,7 +30,8 @@ or conventions. Everything is optional and configurable.
   - `claude`: the organization's `CLAUDE_CONFIG_DIR` (skills, agents and hooks
     shared with your profile), only its blocks' MCPs, and `deny` rules towards
     the other contexts' credentials.
-  - `gh`: its account's `GH_CONFIG_DIR`; the web login opens in a private window.
+  - `gh`: its account's `GH_CONFIG_DIR`; the web login opens with the browser
+    you configure for it (`[navegadores]`), e.g. a private window.
   - `git`: email and SSH key per folder (`includeIf`). For github.com, ws
     replaces the system credential helper: the account is picked by **the repo
     owner in the URL** (an organization's `github_orgs`, or your own user),
@@ -43,7 +44,10 @@ or conventions. Everything is optional and configurable.
   loaded by direnv + nix-direnv. Client repos stay clean.
 - **Automatic registration** of repos cloned from each organization's GitHub
   orgs (`github_orgs`).
-- **Finder tags** per organization (macOS).
+
+Nothing in ws is tied to an operating system's desktop: where your secrets live
+and which browser opens a login are commands you configure (`[secretos]`,
+`[navegadores]`).
 
 ## Requirements
 
@@ -55,7 +59,7 @@ or conventions. Everything is optional and configurable.
 | git | — | per-folder identity |
 | gh | optional | GitHub accounts (also the personal one, for git over HTTPS) |
 | direnv + nix-direnv, nix | optional | per-project tools |
-| `security` (macOS) / `secret-tool` (Linux) | optional | `${NAME}` secrets |
+| your secret store's CLI | optional | `${NAME}` secrets (`[secretos].comando`) |
 
 `ws doctor` checks all of this plus the integration (PATH, gitconfig, config).
 
@@ -109,12 +113,11 @@ automatic registration on `cd`), [`share/gitconfig`](share/gitconfig) to
 ### First time, per machine
 
 1. Install (above) and run `ws doctor`: everything should be green.
-2. Store the secrets your MCPs or variables reference as `${NAME}`:
-   `security add-generic-password -s ws/NAME -w` (macOS) or
-   `secret-tool store --label ws service ws/NAME` (Linux).
+2. Tell ws how to read the secrets your MCPs or variables reference as
+   `${NAME}` (`[secretos].comando`, see below) and store them there.
 3. Create organizations with `prefix + S` → *＋ new organization* (or write
    them in `ws.toml`). For an organization with its own GitHub account, the
-   wizard opens the login in a private window; later, `prefix + s` → select the
+   wizard opens the login with its browser (`[navegadores]`); later, `prefix + s` → select the
    organization → `^g`.
 4. Inside one of its projects, the first `claude` asks for the organization's
    Claude login (`claude auth login`). Your personal one is untouched.
@@ -171,12 +174,25 @@ and projects for you. (Config keys are in Spanish: they are part of the format.)
 | `[agentes.<name>]` | each agent's command (one window per agent in the session) |
 | `[acciones.<name>]` | your own picker keys |
 | `[proyectos."<group>/<name>"]` | folder, extra blocks, `quitar`, `env` and credential overrides |
+| `[secretos]` | `comando`: prints the secret `{nombre}`; `deny`: extra Claude deny rules for your store (Keychain and `gh` ones are always on) |
+| `[navegadores]` | `<name> = "<command>"` that opens a URL; accounts pick one with `navegador` (default `incognito`) |
 | `[ui]` | `lang = "en"` or `"es"` |
 
-Secrets are written as `${NAME}`. They are read when the command launches, from
-the macOS Keychain (`security add-generic-password -s ws/NAME -w`), from
-libsecret on Linux (`secret-tool store --label ws service ws/NAME`) or from the
-environment. They are never written to disk or to your shell.
+Secrets are written as `${NAME}`. They are read when the command launches, with
+your `[secretos].comando`, or from the environment if there is none or it fails.
+They are never written to disk or to your shell. For example:
+
+```toml
+[secretos]
+# macOS Keychain (store with: security add-generic-password -s ws/NAME -w)
+comando = "security find-generic-password -s ws/{nombre} -w"
+# libsecret on Linux (store with: secret-tool store --label ws service ws/NAME)
+# comando = "secret-tool lookup service ws/{nombre}"
+
+[navegadores]
+incognito = "open -na 'Google Chrome' --args --incognito"   # macOS
+# incognito = "google-chrome --incognito"                   # Linux
+```
 
 ## Language
 
@@ -253,7 +269,7 @@ nix flake check                 # the same, in the Nix sandbox
 without touching your setup (`prefix + d` exits and deletes everything).
 
 Each test builds an isolated world ([`tests/mundo.py`](tests/mundo.py)): a
-temporary `HOME`, fake GitHub and Claude accounts, a fake Keychain, git repos
+temporary `HOME`, fake GitHub and Claude accounts, a fake secret store, git repos
 with remotes from made-up orgs and its own tmux server. `claude`, `gh`,
 `opencode` and `security` are fake programs that record the identity they were
 called with; git and tmux are the real ones. Nothing touches your accounts.
@@ -264,7 +280,7 @@ called with; git and tmux are the real ones. Nothing touches your accounts.
 | `test_identidad` | what each program gets: Claude config, MCPs, engine, secrets, `env`, `deny` rules, gh, opencode |
 | `test_git` | email and SSH per folder, account by repo owner, unconnected account (never falls back to the personal one), contaminated system keychain, automatic registration, concurrency |
 | `test_tmux` | marks, floating windows, session as context, picker rows and preview, agents, actions, theme, fzf options, language |
-| `test_robustez` | broken or missing config, failure with a known context (won't launch as personal), machine without optional dependencies, secrets off disk, direnv, Finder tags, per-command overhead |
+| `test_robustez` | broken or missing config, failure with a known context (won't launch as personal), machine without optional dependencies, secrets off disk, direnv, per-command overhead |
 | `test_e2e` | a real tmux client on a pty: `prefix+s`, search, open, Esc, and the full floating-window cycle |
 | `test_e2e_confirmar` | closing a session with Enter, `y`, `n` and `s` (Spanish) |
 

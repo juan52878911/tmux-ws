@@ -61,6 +61,14 @@ class Claude(CasoMundo):
         c = self.lanzar(self.m.ruta("empresa/api"), KLING_TOKEN="del-entorno")
         self.assertEqual(c["env"]["KLING_TOKEN"], "del-entorno")
 
+    def test_sin_comando_de_secretos_solo_el_entorno(self):
+        # ws no sabe de almacenes de secretos: sin [secretos].comando no llama a ninguno
+        del self.m.cfg["secretos"]
+        self.m.escribir()
+        c = self.lanzar(self.m.ruta("empresa/api"), KLING_TOKEN="del-entorno")
+        self.assertEqual(c["env"]["KLING_TOKEN"], "del-entorno")
+        self.assertEqual(self.m.llamadas("security"), [])
+
     def test_variables_de_contexto_con_secreto(self):
         c = self.lanzar(self.m.ruta("empresa/api"))
         self.assertEqual(c["env"]["AWS_PROFILE"], "desde-proyecto")
@@ -94,6 +102,13 @@ class Deny(CasoMundo):
                     self.assertNotIn(regla, d)
                 self.assertIn("Bash(gh auth token:*)", d)
 
+    def test_deny_de_tu_almacen_de_secretos(self):
+        self.m.cfg["secretos"]["deny"] = ["Bash(secret-tool lookup:*)"]
+        self.m.escribir()
+        d = self.deny(self.m.home)
+        self.assertIn("Bash(secret-tool lookup:*)", d)
+        self.assertIn("Bash(security find-generic-password:*)", d)  # las de siempre siguen
+
 
 class GhYOpencode(CasoMundo):
     def test_gh_por_cuenta(self):
@@ -103,6 +118,12 @@ class GhYOpencode(CasoMundo):
         self.assertIn("navegador-incognito", emp["env"]["GH_BROWSER"])
         self.m.run(["gh", "api", "user"], cwd=self.m.ruta("aura/crm"))
         self.assertNotIn("GH_CONFIG_DIR", self.m.ultima("gh")["env"])
+
+    def test_navegador_sin_definir_usa_el_del_sistema(self):
+        del self.m.cfg["navegadores"]
+        self.m.escribir()
+        self.m.run(["gh", "api", "user"], cwd=self.m.ruta("empresa/api"))
+        self.assertNotIn("GH_BROWSER", self.m.ultima("gh")["env"])
 
     def test_opencode_recibe_mcps_traducidos(self):
         self.m.run(["opencode"], cwd=self.m.ruta("empresa/api"))

@@ -72,7 +72,9 @@ class Mundo:
         self.log = self.mock / "llamadas.jsonl"
         self.cfg = {"github": {"personal": {"usuario": "yo-personal"}}, "organizaciones": {},
                     "entornos": {}, "bloques": {}, "mcps": {}, "proyectos": {}, "agentes": {},
-                    "acciones": {}, "motores": {}}
+                    "acciones": {}, "motores": {},
+                    "secretos": {"comando": "security find-generic-password -s ws/{nombre} -w"},
+                    "navegadores": {"incognito": "true"}}
         self._keychain = {}
         self.socket = None
         # Cuenta personal: la del helper "del sistema" y la de ~/.config/gh.
@@ -155,6 +157,11 @@ class Mundo:
                 nombre = f'"{clave}"' if "/" in clave else clave
                 lineas.append(f"[{seccion}.{nombre}]")
                 lineas += [f"{k} = {toml(v)}" for k, v in datos.items()]
+                lineas.append("")
+        for seccion in ("secretos", "navegadores"):
+            if self.cfg.get(seccion):
+                lineas.append(f"[{seccion}]")
+                lineas += [f"{k} = {toml(v)}" for k, v in self.cfg[seccion].items()]
                 lineas.append("")
         if self.cfg["bloques"]:
             lineas.append("[bloques]")
