@@ -176,6 +176,7 @@ and projects for you. (Config keys are in Spanish: they are part of the format.)
 | `[proyectos."<group>/<name>"]` | folder, extra blocks, `quitar`, `env` and credential overrides |
 | `[secretos]` | `comando`: prints the secret `{nombre}`; `deny`: extra Claude deny rules for your store (Keychain and `gh` ones are always on) |
 | `[navegadores]` | `<name> = "<command>"` that opens a URL; accounts and groups pick one with `navegador`; otherwise `defecto` |
+| `[env]` | variables for every context, Normal included (contexts can override them) |
 | `[ui]` | `lang = "en"` or `"es"` |
 
 Secrets are written as `${NAME}`. They are read when the command launches, with

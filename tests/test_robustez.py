@@ -150,3 +150,30 @@ class Actualizacion(CasoMundo):
         os.utime(sello, (2_000_000_000, 2_000_000_000))
         self.m.run(["gh", "--version"], cwd=self.m.ruta("empresa/api"))
         self.assertIn("git-credential auto", gitcfg.read_text())
+
+
+class Mantenimiento(CasoMundo):
+    def test_claude_md_roto_se_repara(self):
+        org = self.m.config.parent / "orgs"
+        org.mkdir(parents=True, exist_ok=True)
+        (org / "empresa.CLAUDE.md").write_text("@~/.claude/CLAUDE.md\n# Empresa\n")
+        md = self.m.estado("claude", "empresa", "CLAUDE.md")
+        md.parent.mkdir(parents=True, exist_ok=True)
+        md.symlink_to(self.m.home / "ruta/que/ya/no/existe.md")
+        self.m.run(["claude"], cwd=self.m.ruta("empresa/api"))
+        self.assertIn("# Empresa", md.read_text())
+
+    def test_env_global_tambien_en_normal(self):
+        self.m.escribir('\n[env]\nGLOBAL_X = "${KLING_TOKEN}"\nAWS_PROFILE = "global"\n')
+        self.m.run(["claude"], cwd=self.m.home)
+        env = self.m.ultima("claude")["env"]
+        self.assertEqual(env.get("AWS_PROFILE"), "global")
+        self.m.run(["claude"], cwd=self.m.ruta("empresa/api"))
+        self.assertEqual(self.m.ultima("claude")["env"]["AWS_PROFILE"], "desde-proyecto")
+
+    def test_doctor_avisa_de_identidad_incompleta(self):
+        self.m.proyecto("aura/duplicado", ruta=self.m.ruta("aura/crm"), git=False)
+        self.m.escribir()
+        r = self.m.ws("doctor")
+        self.assertIn("nueva: own GitHub account but no git_correo", r.stdout)
+        self.assertIn("projects sharing a folder", r.stdout)

@@ -18,7 +18,7 @@ args = sys.argv[1:]
 base = Path(os.environ.get("WS_MOCK_DIR", "/nonexistent"))
 VARS = ("CLAUDE_CONFIG_DIR", "GH_CONFIG_DIR", "GH_BROWSER", "BROWSER", "OPENCODE_CONFIG",
         "ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_MODEL", "WS_CONTEXTO",
-        "KLING_TOKEN", "OBSIDIAN_API_KEY", "AWS_PROFILE", "NPM_TOKEN", "PATH")
+        "KLING_TOKEN", "OBSIDIAN_API_KEY", "AWS_PROFILE", "NPM_TOKEN", "GLOBAL_X", "PATH")
 
 
 def registrar(extra=None):

@@ -148,7 +148,8 @@ def efectiva(cfg, ctx):
     nombres = list(dict.fromkeys(g.get("bloques", []) + p.get("bloques", [])))
     quitar = set(p.get("quitar", []))
     res = {"bloques": [], "mcps": [], "agentes": [], "herramientas": [],
-           "permitir": [], "claude_motor": "anthropic", "hook_guardian": False, "env": {}}
+           "permitir": [], "claude_motor": "anthropic", "hook_guardian": False,
+           "env": dict(cfg.get("env", {}))}  # [env] global: la base de todos los contextos
     for n in nombres:
         if n in quitar:
             continue
@@ -313,7 +314,10 @@ def mcps_opencode(cfg, nombres):
 # Órdenes con las que un agente podría sacar un token en claro. git sigue
 # funcionando: su helper llama a gh por su cuenta, no a través de Bash.
 DENY_SIEMPRE = ["Bash(security find-generic-password:*)", "Bash(security find-internet-password:*)",
-                "Bash(security dump-keychain:*)", "Bash(gh auth token:*)", "Bash(gh auth status --show-token:*)"]
+                "Bash(security dump-keychain:*)", "Bash(gh auth token:*)", "Bash(gh auth status --show-token:*)",
+                # credenciales que ningún agente necesita leer
+                "Read(~/.ssh/id_*)", "Read(~/.aws/credentials)", "Read(~/.docker/config.json)",
+                "Read(~/.netrc)"]
 
 
 def reglas_deny(cfg, ctx):
@@ -386,7 +390,9 @@ def preparar_claude(cfg, g):
     md = d / "CLAUDE.md"
     propio = CONFIG.parent / "orgs" / f"{g['clave']}.CLAUDE.md"  # junto a ws.toml
     if propio.exists():
-        if not md.is_symlink():
+        # Re-enlazar si no es un enlace, está roto o apunta a otro sitio (p. ej.
+        # tras mover ws.toml de carpeta): si no, Claude arrancaría sin él.
+        if not md.is_symlink() or not md.exists() or _real(md) != _real(propio):
             md.unlink(missing_ok=True)
             md.symlink_to(propio)
     elif not md.exists():
@@ -715,7 +721,12 @@ def ejecutar(prog, args):
                 args = ["--settings", str(normal), *args]
             except Exception as e:  # sin reglas deny, pero con tu claude de siempre
                 print(t("err_deny", e=e), file=sys.stderr)
-        os.execv(real, [prog, *args])
+        env = dict(os.environ)
+        try:
+            env.update(resolver_env(cfg.get("env", {}), cfg))  # [env] global también en Normal
+        except Exception:
+            pass
+        os.execve(real, [prog, *args], env)
 
     # Con contexto conocido, si algo falla NO se lanza con tu identidad personal:
     # sería usar la cuenta equivocada justo donde ws debe evitarlo.
@@ -862,6 +873,29 @@ def doctor():
         fallos += not shutil.which(prog)
     else:
         print(f"{opc} {t('d_secrets_env')}")
+    avisos = []
+    try:
+        cfg = cfg if isinstance(cfg, dict) else {}
+        for g in grupos(cfg).values():
+            c = credenciales(cfg, g["clave"])
+            if c["github"] != "personal" and not c.get("git_correo"):
+                avisos.append(t("d_no_email", g=g["clave"]))
+        vistas = {}
+        for pr in proyectos(cfg).values():
+            if pr["ruta"]:
+                r = _real(pr["ruta"])
+                if r in vistas:
+                    avisos.append(t("d_dup_path", a=vistas[r], b=pr["clave"]))
+                vistas[r] = pr["clave"]
+    except Exception:
+        pass
+    for enlace in (ESTADO / "claude").glob("*/*"):
+        if enlace.is_symlink() and not enlace.exists():
+            avisos.append(t("d_broken_link", l=enlace))
+    for a in avisos:
+        print(f"{opc} {a}")
+    if not avisos:
+        print(f"{ok_} {t('d_identity_ok')}")
     for prog in ("claude", "gh", "opencode"):
         primero = shutil.which(prog)
         if primero and _real(Path(primero).parent) == _real(SHIMS):
