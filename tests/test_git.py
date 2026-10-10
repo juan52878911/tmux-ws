@@ -31,6 +31,16 @@ class Git(CasoMundo):
         fuera = self.m.repo(self.m.home / "src/mio2")
         self.assertEqual(self.m.run(["git", "config", "user.name"], cwd=fuera).stdout.strip(), "Yo")
 
+    def test_identidad_por_url_antes_de_registrar(self):
+        # Recién clonado y sin registrar (el registro va en segundo plano): ya
+        # tiene el correo de la organización por la URL de su remoto.
+        for remoto in ("https://github.com/empresa-co/recien.git", "git@github.com:empresa-co/recien2.git"):
+            ruta = self.m.repo(self.m.home / "src" / remoto.rsplit("/", 1)[-1], remoto)
+            r = self.m.run(["git", "config", "user.email"], cwd=ruta)
+            self.assertEqual(r.stdout.strip(), "yo@empresa.com", remoto)
+        ajeno = self.m.repo(self.m.home / "src/ajeno-x", "https://github.com/otra-org/x.git")
+        self.assertEqual(self.m.run(["git", "config", "user.email"], cwd=ajeno).stdout.strip(), "yo@personal.dev")
+
     def test_push_de_la_org_usa_su_cuenta(self):
         rc, datos, _ = self.m.credencial(self.m.ruta("empresa/api"))
         self.assertEqual(rc, 0)

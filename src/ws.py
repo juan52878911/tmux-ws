@@ -459,7 +459,20 @@ def gitconfig(cfg):
         for variante in sorted({str(ruta), str(_real(ruta))}):
             bloques.append(f'[includeIf "gitdir:{variante}/"]\n\tpath = {archivo}\n')
 
-    # Primero las raíces y después los proyectos: si se solapan, gana el último.
+    # Primero por URL del remoto, luego raíces, luego proyectos: si se solapan,
+    # gana el último (lo más concreto).
+    # Por URL: un repo de una de las github_orgs del grupo tiene su identidad
+    # desde el primer instante tras clonarlo, esté o no registrado todavía
+    # (git >= 2.36, includeIf "hasconfig:remote.*.url:…").
+    for g in grupos(cfg).values():
+        orgs = {o for o in g.get("github_orgs", [])} | {o.lower() for o in g.get("github_orgs", [])}
+        if not orgs:
+            continue
+        archivo = archivo_para(g["clave"], credenciales(cfg, g["clave"]))
+        for org in sorted(orgs):
+            for patron in (f"https://github.com/{org}/**", f"git@github.com:{org}/**",
+                           f"ssh://git@github.com/{org}/**"):
+                bloques.append(f'[includeIf "hasconfig:remote.*.url:{patron}"]\n\tpath = {archivo}\n')
     for g in grupos(cfg).values():
         if g.get("raiz"):
             incluir(expandir(g["raiz"]), archivo_para(g["clave"], credenciales(cfg, g["clave"])))
