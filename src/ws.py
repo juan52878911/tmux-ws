@@ -436,14 +436,7 @@ def dir_gh(cuenta):
 
 
 def binario_real(prog):
-    """Primer `prog` del PATH que no sea un shim. Las apps de escritorio (Obsidian,
-    un editor abierto desde el Dock) heredan el PATH mínimo de launchd, sin Nix ni
-    Homebrew: detrás del PATH se miran también sus rutas de siempre."""
-    usuario = os.environ.get("USER", HOME.name)
-    extra = [f"/etc/profiles/per-user/{usuario}/bin", str(HOME / ".nix-profile/bin"),
-             "/run/current-system/sw/bin", "/nix/var/nix/profiles/default/bin",
-             "/opt/homebrew/bin", "/usr/local/bin"]
-    for d in os.environ.get("PATH", "").split(os.pathsep) + extra:
+    for d in os.environ.get("PATH", "").split(os.pathsep):
         if not d or _real(d) == _real(SHIMS):
             continue
         c = Path(d) / prog
