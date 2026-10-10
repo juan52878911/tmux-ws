@@ -254,8 +254,8 @@ def _poner_campo(cabecera, campo, valor):
 def conectar_github(cuenta):
     """Login web de gh para una cuenta que no es la personal.
 
-    La página se abre con el navegador de la cuenta ([navegadores], por defecto
-    "incognito" si lo defines), así que tu sesión personal no interviene. El token se guarda en
+    La página se abre con el navegador de la cuenta ([navegadores], o el
+    "defecto"), así que tu sesión personal no interviene. El token se guarda en
     el hosts.yml de su GH_CONFIG_DIR (--insecure-storage, chmod 600): en el
     Llavero compartiría la entrada por defecto con tu cuenta personal.
     """
@@ -264,7 +264,7 @@ def conectar_github(cuenta):
     d = ws.dir_gh(cuenta)
     d.mkdir(parents=True, exist_ok=True)
     env = {**os.environ, "GH_CONFIG_DIR": str(d)}
-    nav = ws.script_navegador(cfg, datos.get("navegador", "incognito"))
+    nav = ws.script_navegador(cfg, datos.get("navegador"))
     if nav:
         env["GH_BROWSER"] = nav
     gh = ws.binario_real("gh") or "gh"
@@ -280,8 +280,6 @@ def conectar_github(cuenta):
                              capture_output=True, text=True).stdout.strip()
     if usuario:
         poner_campo(f"github.{cuenta}", "usuario", usuario)
-        if "navegador" not in datos:
-            poner_campo(f"github.{cuenta}", "navegador", "incognito")
         ws.sync()
         print(f"\n{ACTIVO}{t('connected_as', c=cuenta, u=usuario)}{FIN}")
     return usuario
@@ -580,7 +578,7 @@ def crear_grupo(tipo):
         datos["git_correo"] = preguntar(t("commit_email"))
     datos["bloques"] = elegir_bloques(cfg, cabecera=t("org_blocks")) or ["base"]
     if cuenta_nueva:
-        anadir_seccion(f"github.{cuenta_nueva}", {"usuario": "", "navegador": "incognito"})
+        anadir_seccion(f"github.{cuenta_nueva}", {"usuario": ""})
     seccion = "organizaciones" if tipo == "organizacion" else "entornos"
     anadir_seccion(f"{seccion}.{clave}", datos)
     ws.sync()

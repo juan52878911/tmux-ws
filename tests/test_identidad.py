@@ -31,7 +31,7 @@ class Claude(CasoMundo):
         for compartido in ("skills", "agents", "hooks"):  # compartidos con el perfil personal
             self.assertEqual((dir_claude / compartido).resolve(), (self.m.home / ".claude" / compartido).resolve())
         self.assertTrue((dir_claude / "CLAUDE.md").read_text().startswith("@~/.claude/CLAUDE.md"))
-        self.assertIn("navegador-incognito", c["env"]["BROWSER"])
+        self.assertIn("navegador-defecto", c["env"]["BROWSER"])
         self.assertIn("--strict-mcp-config", c["args"])
         mcp = json.loads(Path(self.opcion(c, "--mcp-config")).read_text())["mcpServers"]
         self.assertEqual(sorted(mcp), ["kindling", "tree-sitter"])
@@ -115,9 +115,20 @@ class GhYOpencode(CasoMundo):
         self.m.run(["gh", "api", "user"], cwd=self.m.ruta("empresa/api"))
         emp = self.m.ultima("gh")
         self.assertEqual(emp["env"]["GH_CONFIG_DIR"], str(self.m.estado("gh", "empresa")))
-        self.assertIn("navegador-incognito", emp["env"]["GH_BROWSER"])
+        self.assertIn("navegador-defecto", emp["env"]["GH_BROWSER"])
         self.m.run(["gh", "api", "user"], cwd=self.m.ruta("aura/crm"))
         self.assertNotIn("GH_CONFIG_DIR", self.m.ultima("gh")["env"])
+
+    def test_navegador_propio_de_la_cuenta(self):
+        self.m.cfg["github"]["empresa"]["navegador"] = "otro"
+        self.m.escribir()
+        self.m.run(["gh", "api", "user"], cwd=self.m.ruta("empresa/api"))
+        self.assertIn("navegador-otro", self.m.ultima("gh")["env"]["GH_BROWSER"])
+        # un nombre que no existe cae al de por defecto
+        self.m.cfg["github"]["empresa"]["navegador"] = "no-existe"
+        self.m.escribir()
+        self.m.run(["gh", "api", "user"], cwd=self.m.ruta("empresa/api"))
+        self.assertIn("navegador-defecto", self.m.ultima("gh")["env"]["GH_BROWSER"])
 
     def test_navegador_sin_definir_usa_el_del_sistema(self):
         del self.m.cfg["navegadores"]

@@ -225,9 +225,12 @@ def script_navegador(cfg, nombre):
 
     gh (GH_BROWSER) y claude (BROWSER) llaman a un programa con la URL como
     argumento; con un navegador aparte (incógnito, otro perfil) el login de otra
-    cuenta no toca tu sesión personal. Sin navegador, el del sistema.
+    cuenta no toca tu sesión personal. Sin `nombre` (o si no existe), el
+    navegador "defecto"; si tampoco está, el del sistema.
     """
-    orden = cfg.get("navegadores", {}).get(nombre or "")
+    navegadores = cfg.get("navegadores", {})
+    nombre = nombre if nombre in navegadores else "defecto"
+    orden = navegadores.get(nombre)
     if not orden:
         return None
     destino = ESTADO / "bin" / ("navegador-" + re.sub(r"[^a-zA-Z0-9]+", "-", nombre))
@@ -733,7 +736,7 @@ def entorno_de(prog, args, cfg, ctx):
     if prog == "claude":
         if c["claude"] == "propia":
             env["CLAUDE_CONFIG_DIR"] = str(preparar_claude(cfg, g))
-            nav = script_navegador(cfg, c["navegador"] or "incognito")
+            nav = script_navegador(cfg, c["navegador"])
             if nav:
                 env["BROWSER"] = nav
         for v in variables_en(mcps_claude(cfg, ef["mcps"])):
@@ -756,7 +759,7 @@ def entorno_de(prog, args, cfg, ctx):
 
     if prog in ("gh", "claude", "opencode") and cuenta != "personal":
         env["GH_CONFIG_DIR"] = str(dir_gh(cuenta))
-        nav = script_navegador(cfg, cfg.get("github", {}).get(cuenta, {}).get("navegador", "incognito"))
+        nav = script_navegador(cfg, cfg.get("github", {}).get(cuenta, {}).get("navegador"))
         if nav:
             env["GH_BROWSER"] = nav
     # Variables de la organización/proyecto: para cualquier programa con shim.

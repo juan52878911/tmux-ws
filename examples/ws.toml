@@ -24,9 +24,10 @@ comando = "security find-generic-password -s ws/{nombre} -w"   # Llavero de macO
 # deny = ["Bash(secret-tool lookup:*)"]
 
 # Navegadores para los logins web (reciben la URL). Una cuenta elige uno con
-# `navegador`; por defecto "incognito". Sin definir, el del sistema.
+# `navegador`; si no, "defecto". Sin ninguno, el del sistema. El comando hereda
+# WS_CONTEXTO, así que puede elegir perfil o contenedor según la organización.
 [navegadores]
-incognito = "open -na 'Google Chrome' --args --incognito"
+defecto = "open -na 'Google Chrome' --args --incognito"
 # trabajo = "open -na 'Google Chrome' --args --profile-directory='Profile 1'"
 
 # ─── Cuentas de GitHub ───────────────────────────────────────────────────────
@@ -38,7 +39,7 @@ usuario = "tu-usuario"
 
 [github.empresa]
 usuario = ""
-navegador = "incognito"        # un nombre de [navegadores]
+# navegador = "trabajo"        # un nombre de [navegadores]; si no, "defecto"
 
 # ─── Organizaciones ──────────────────────────────────────────────────────────
 # claude: "personal" o "propia" (login, historial y memoria aparte).

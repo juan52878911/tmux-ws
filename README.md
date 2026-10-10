@@ -175,7 +175,7 @@ and projects for you. (Config keys are in Spanish: they are part of the format.)
 | `[acciones.<name>]` | your own picker keys |
 | `[proyectos."<group>/<name>"]` | folder, extra blocks, `quitar`, `env` and credential overrides |
 | `[secretos]` | `comando`: prints the secret `{nombre}`; `deny`: extra Claude deny rules for your store (Keychain and `gh` ones are always on) |
-| `[navegadores]` | `<name> = "<command>"` that opens a URL; accounts pick one with `navegador` (default `incognito`) |
+| `[navegadores]` | `<name> = "<command>"` that opens a URL; accounts and groups pick one with `navegador`; otherwise `defecto` |
 | `[ui]` | `lang = "en"` or `"es"` |
 
 Secrets are written as `${NAME}`. They are read when the command launches, with
@@ -190,8 +190,8 @@ comando = "security find-generic-password -s ws/{nombre} -w"
 # comando = "secret-tool lookup service ws/{nombre}"
 
 [navegadores]
-incognito = "open -na 'Google Chrome' --args --incognito"   # macOS
-# incognito = "google-chrome --incognito"                   # Linux
+defecto = "open -na 'Google Chrome' --args --incognito"   # macOS
+# defecto = "google-chrome --incognito"                   # Linux
 ```
 
 ## Language

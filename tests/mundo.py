@@ -74,7 +74,7 @@ class Mundo:
                     "entornos": {}, "bloques": {}, "mcps": {}, "proyectos": {}, "agentes": {},
                     "acciones": {}, "motores": {},
                     "secretos": {"comando": "security find-generic-password -s ws/{nombre} -w"},
-                    "navegadores": {"incognito": "true"}}
+                    "navegadores": {"defecto": "true", "otro": "true"}}
         self._keychain = {}
         self.socket = None
         # Cuenta personal: la del helper "del sistema" y la de ~/.config/gh.
@@ -100,9 +100,10 @@ class Mundo:
         self._json(self.mock / "keychain.json", self._keychain)
         return self
 
-    def cuenta_github(self, cuenta, usuario, token=None, navegador="incognito"):
+    def cuenta_github(self, cuenta, usuario, token=None, navegador=None):
         """Cuenta no personal. Con token = ya conectada (hosts en su GH_CONFIG_DIR)."""
-        self.cfg["github"][cuenta] = {"usuario": usuario if token else "", "navegador": navegador}
+        self.cfg["github"][cuenta] = {"usuario": usuario if token else "",
+                                      **({"navegador": navegador} if navegador else {})}
         if token:
             self._json(self.home / f".local/state/ws/gh/{cuenta}/hosts.json", {usuario: token})
         return self
