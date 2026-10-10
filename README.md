@@ -167,7 +167,7 @@ and projects for you. (Config keys are in Spanish: they are part of the format.)
 | Section | Defines |
 |---|---|
 | `[github.<account>]` | GitHub accounts; `personal` is your usual one |
-| `[organizaciones.<key>]` | credentials, blocks, `github_orgs`, `env`, root folder and tag |
+| `[organizaciones.<key>]` | credentials (`github`, `claude`, `git_correo`, `git_nombre`, `ssh_clave`), blocks, `github_orgs`, `env`, root folder and tag |
 | `[entornos.<key>]` | your own credentials with a set of blocks |
 | `[bloques]` | reusable pieces: `mcps`, `agentes`, `herramientas`, `permitir`, `env`, `claude_motor` |
 | `[mcps.<name>]` | each MCP once, in a neutral format (translated for Claude and opencode) |

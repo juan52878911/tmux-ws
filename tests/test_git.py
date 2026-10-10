@@ -22,6 +22,15 @@ class Git(CasoMundo):
         fuera = self.m.repo(self.m.home / "src/personal")
         self.assertEqual(self.correo(fuera), "yo@personal.dev")
 
+    def test_nombre_de_autor_por_organizacion(self):
+        self.m.cfg["organizaciones"]["empresa"]["git_nombre"] = "Yo Empresa"
+        self.m.escribir()
+        self.ws_ok("sync")
+        r = self.m.run(["git", "config", "user.name"], cwd=self.m.ruta("empresa/api"))
+        self.assertEqual(r.stdout.strip(), "Yo Empresa")
+        fuera = self.m.repo(self.m.home / "src/mio2")
+        self.assertEqual(self.m.run(["git", "config", "user.name"], cwd=fuera).stdout.strip(), "Yo")
+
     def test_push_de_la_org_usa_su_cuenta(self):
         rc, datos, _ = self.m.credencial(self.m.ruta("empresa/api"))
         self.assertEqual(rc, 0)

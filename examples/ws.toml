@@ -50,6 +50,7 @@ prefijo = "em"
 raiz = "~/Orgs/Empresa"
 github = "empresa"
 git_correo = "yo@empresa.com"
+git_nombre = "Yo Apellido"     # opcional: nombre de autor de los commits
 claude = "propia"
 github_orgs = ["empresa-org"]
 bloques = ["base", "opencode"]

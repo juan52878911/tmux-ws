@@ -177,7 +177,7 @@ def resolver_env(env, cfg):
     return salida
 
 
-CREDENCIALES = ("github", "git_correo", "ssh_clave", "claude", "navegador")
+CREDENCIALES = ("github", "git_correo", "git_nombre", "ssh_clave", "claude", "navegador")
 
 
 def credenciales(cfg, grupo, proyecto=None):
@@ -433,8 +433,12 @@ def gitconfig(cfg):
 
     def archivo_para(nombre, c):
         lineas = []
-        if c.get("git_correo"):
-            lineas += ["[user]", f"\temail = {c['git_correo']}"]
+        if c.get("git_correo") or c.get("git_nombre"):
+            lineas.append("[user]")
+            if c.get("git_correo"):
+                lineas.append(f"\temail = {c['git_correo']}")
+            if c.get("git_nombre"):
+                lineas.append(f"\tname = {c['git_nombre']}")
         if c.get("ssh_clave"):
             clave = os.path.expanduser(c["ssh_clave"])
             lineas += ["[core]", f"\tsshCommand = ssh -i {clave} -o IdentitiesOnly=yes"]
