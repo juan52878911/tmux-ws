@@ -171,3 +171,27 @@ class SinConfig(CasoMundo):
         fuera = self.m.repo(self.m.home / "src/mio")
         rc, datos, _ = self.m.credencial(fuera, "https://github.com/yo-personal/mio.git")
         self.assertEqual((rc, datos.get("password")), (0, "tok-personal"))
+
+
+class Worktrees(CasoMundo):
+    def worktree(self, repo, destino):
+        self.m.run(["git", "commit", "-q", "--allow-empty", "-m", "x"], cwd=repo)
+        r = self.m.run(["git", "worktree", "add", "-q", str(destino)], cwd=repo)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        return destino
+
+    def proyectos(self):
+        import re
+        return re.findall(r'^\[proyectos\."([^"]+)"\]', self.m.config.read_text(), re.M)
+
+    def test_worktree_dentro_de_un_proyecto_es_ese_proyecto(self):
+        api = self.m.ruta("empresa/api")
+        wt = self.worktree(api, api / ".claude/worktrees/rama-x")
+        self.assertEqual(self.ws_ok("descubrir", str(wt)).stdout.strip(), "empresa/api")
+        self.assertEqual([p for p in self.proyectos() if "rama-x" in p], [])
+
+    def test_worktree_suelto_registra_su_repo_principal(self):
+        principal = self.m.repo(self.m.home / "src/svc-main", "https://github.com/empresa-co/svc-main")
+        wt = self.worktree(principal, self.m.home / "otra/svc-wt")
+        self.assertEqual(self.ws_ok("descubrir", str(wt)).stdout.strip(), "empresa/svc-main")
+        self.assertIn('ruta = "~/src/svc-main"', self.m.config.read_text())

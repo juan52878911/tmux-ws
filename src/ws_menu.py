@@ -548,6 +548,12 @@ def elegir_bloques(cfg, excluir=(), cabecera=None):
     ops = [(n, f"{n:<11} {SECUNDARIO}{describir_bloque(b)}{FIN}")
            for n, b in cfg.get("bloques", {}).items() if n not in excluir]
     _, sel = elegir(ops, cabecera, multi=True)
+    # Un bloque que cambia el motor de Claude (p. ej. minimax) sustituye tu login:
+    # se confirma aparte para que no se cuele entre los marcados.
+    for n in list(sel):
+        motor = cfg.get("bloques", {}).get(n, {}).get("claude_motor")
+        if motor and motor != "anthropic" and not confirmar(t("confirm_engine", m=motor)):
+            sel.remove(n)
     return sel
 
 

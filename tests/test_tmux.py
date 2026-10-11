@@ -171,3 +171,18 @@ class Idioma(CasoMundo):
         en = set(i18n.TEXTOS["en"])
         for codigo, textos in i18n.TEXTOS.items():
             self.assertEqual(set(textos) ^ en, set(), f"claves distintas en {codigo}")
+
+
+class MotorEnAsistente(CasoMundo):
+    def test_bloque_que_cambia_el_motor_pide_confirmacion(self):
+        import sys
+        pre = f"import sys; sys.path.insert(0, {str(RAIZ / 'src')!r}); import ws, ws_menu as m\n"
+        codigo = (pre + "m.elegir = lambda *a, **k: (None, ['base', 'mm'])\n"
+                  "preguntas = []\n"
+                  "m.confirmar = lambda texto: preguntas.append(texto) or False\n"
+                  "print(m.elegir_bloques(ws.cargar()), preguntas)")
+        r = self.m.run([sys.executable, "-c", codigo])
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("['base']", r.stdout)
+        self.assertIn("minimax", r.stdout)
+

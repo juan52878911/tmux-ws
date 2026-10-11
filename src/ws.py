@@ -636,10 +636,19 @@ def descubrir(ruta, cfg=None):
     clave de proyecto (nueva o existente) o None."""
     cfg = cfg or cargar()
     top = _git(ruta, "rev-parse", "--show-toplevel")
-    if not top or es_temporal(top):
+    if not top:
         return None
+    # Un worktree de git (p. ej. los de Claude en .claude/worktrees) es parte de
+    # su repo principal: se trata como ese repo, no como un proyecto nuevo.
+    comun = _git(ruta, "rev-parse", "--path-format=absolute", "--git-common-dir")
+    if comun and Path(comun).name == ".git" and _real(Path(comun).parent) != _real(top):
+        top = str(Path(comun).parent)
+    if es_temporal(top):
+        return None
+    # Si ya lo contiene un proyecto registrado (él mismo, o un repo dentro de
+    # él), es de ese proyecto.
     ctx = contexto(cfg, top, usar_tmux=False)
-    if ctx and ctx["proyecto"] and _real(proyectos(cfg)[ctx["proyecto"]]["ruta"]) == _real(top):
+    if ctx and ctx["proyecto"]:
         return ctx["proyecto"]
     dueno = dueno_remoto(top)
     if not dueno:
