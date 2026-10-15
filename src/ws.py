@@ -149,7 +149,8 @@ def efectiva(cfg, ctx):
     quitar = set(p.get("quitar", []))
     res = {"bloques": [], "mcps": [], "agentes": [], "herramientas": [],
            "permitir": [], "claude_motor": "anthropic", "hook_guardian": False,
-           "env": dict(cfg.get("env", {}))}  # [env] global: la base de todos los contextos
+           "env": dict(cfg.get("env", {})),  # [env] global: la base de todos los contextos
+           "path": []}
     for n in nombres:
         if n in quitar:
             continue
@@ -160,12 +161,17 @@ def efectiva(cfg, ctx):
         res["claude_motor"] = b.get("claude_motor", res["claude_motor"])
         res["hook_guardian"] |= bool(b.get("hook_guardian"))
         res["env"].update(b.get("env", {}))
+        res["path"] = b.get("path", []) + res["path"]
     for k in ("mcps", "agentes", "herramientas", "permitir"):
         res[k] = [x for x in res[k] if x not in quitar]
     # Variables propias: bloques < grupo < proyecto. Cualquier comando que pase
     # por ws las recibe (AWS_PROFILE, KUBECONFIG, NPM_CONFIG_USERCONFIG…).
     res["env"].update(g.get("env", {}))
     res["env"].update(p.get("env", {}))
+    # Carpetas extra del PATH (p. ej. un prefijo de npm solo de la organización):
+    # proyecto > grupo > bloques, sin repetir.
+    res["path"] = list(dict.fromkeys(os.path.expanduser(x) for x in
+                                     p.get("path", []) + g.get("path", []) + res["path"]))
     return res
 
 
@@ -801,6 +807,8 @@ def entorno_de(prog, args, cfg, ctx):
             env["GH_BROWSER"] = nav
     # Variables de la organización/proyecto: para cualquier programa con shim.
     env.update(resolver_env(ef["env"], cfg))
+    if ef["path"]:
+        env["PATH"] = os.pathsep.join([*ef["path"], env.get("PATH", "")])
     return args, env
 
 
@@ -819,6 +827,8 @@ def direnv():
     for k, v in ef["env"].items():
         if not VAR.search(str(v)):
             print(f"export {k}={shlex.quote(os.path.expanduser(str(v)))}")
+    for ruta in reversed(ef["path"]):
+        print(f"PATH_add {shlex.quote(ruta)}")
     if ef["herramientas"]:
         print(f'use flake "{d / "flake"}"')
 
@@ -829,15 +839,21 @@ def apply(sesion):
     La flotante f-<sesión> hereda la marca de su sesión principal.
     """
     base = sesion_base(sesion)
+    cfg = cargar()
+    r = subprocess.run(["tmux", "display", "-p", "-t", f"={base}:", "#{pane_current_path}"],
+                       capture_output=True, text=True)
+    ctx = contexto(cfg, r.stdout.strip() or None, usar_tmux=False)
     r = subprocess.run(["tmux", "show", "-t", f"={base}:", "-qv", "@ws"], capture_output=True, text=True)
     marca = r.stdout.strip()
-    if not marca:
-        r = subprocess.run(["tmux", "display", "-p", "-t", f"={base}:", "#{pane_current_path}"],
-                           capture_output=True, text=True)
-        ctx = contexto(cargar(), r.stdout.strip() or None, usar_tmux=False)
-        marca = (ctx["proyecto"] or ctx["grupo"]) if ctx else ""
+    if marca and (not ctx or marca.partition("/")[0] != ctx["grupo"]):
+        ctx = {"grupo": marca.partition("/")[0], "proyecto": None, "origen": "tmux"}
+    marca = marca or ((ctx["proyecto"] or ctx["grupo"]) if ctx else "")
     if marca:
         subprocess.run(["tmux", "set", "-t", f"={sesion}:", "@ws", marca])
+    # PATH propio del contexto para los shells de la sesión (lo antepone el zshrc de ws)
+    rutas = efectiva(cfg, ctx)["path"] if ctx and ctx["grupo"] in grupos(cfg) else []
+    if rutas:
+        subprocess.run(["tmux", "set-environment", "-t", f"={sesion}:", "WS_PATH", os.pathsep.join(rutas)])
 
 
 # ─── Diagnóstico ─────────────────────────────────────────────────────────────

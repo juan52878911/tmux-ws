@@ -24,6 +24,12 @@ class Claude(CasoMundo):
         self.assertIn("Read(~/.local/state/ws/claude/empresa/**)", ajustes["permissions"]["deny"])
         self.assertEqual(c["args"][-2:], ["-p", "hola"])
 
+    def test_path_de_la_org_solo_dentro(self):
+        h = str(self.m.home)
+        dentro = self.lanzar(self.m.ruta("empresa/api"))["env"]["PATH"].split(":")
+        self.assertEqual(dentro[:2], [f"{h}/api-bin", f"{h}/.npm-empresa/bin"])
+        self.assertNotIn(f"{h}/.npm-empresa/bin", self.lanzar(self.m.home)["env"]["PATH"].split(":"))
+
     def test_org_con_claude_propio(self):
         c = self.lanzar(self.m.ruta("empresa/api"))
         dir_claude = Path(c["env"]["CLAUDE_CONFIG_DIR"])

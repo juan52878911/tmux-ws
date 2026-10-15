@@ -167,13 +167,13 @@ and projects for you. (Config keys are in Spanish: they are part of the format.)
 | Section | Defines |
 |---|---|
 | `[github.<account>]` | GitHub accounts; `personal` is your usual one |
-| `[organizaciones.<key>]` | credentials (`github`, `claude`, `git_correo`, `git_nombre`, `ssh_clave`), blocks, `github_orgs`, `env`, root folder and tag |
+| `[organizaciones.<key>]` | credentials (`github`, `claude`, `git_correo`, `git_nombre`, `ssh_clave`), blocks, `github_orgs`, `env`, `path`, root folder and tag |
 | `[entornos.<key>]` | your own credentials with a set of blocks |
-| `[bloques]` | reusable pieces: `mcps`, `agentes`, `herramientas`, `permitir`, `env`, `claude_motor` |
+| `[bloques]` | reusable pieces: `mcps`, `agentes`, `herramientas`, `permitir`, `env`, `path`, `claude_motor` |
 | `[mcps.<name>]` | each MCP once, in a neutral format (translated for Claude and opencode) |
 | `[agentes.<name>]` | each agent's command (one window per agent in the session) |
 | `[acciones.<name>]` | your own picker keys |
-| `[proyectos."<group>/<name>"]` | folder, extra blocks, `quitar`, `env` and credential overrides |
+| `[proyectos."<group>/<name>"]` | folder, extra blocks, `quitar`, `env`, `path` and credential overrides |
 | `[secretos]` | `comando`: prints the secret `{nombre}`; `deny`: extra Claude deny rules for your store (Keychain and `gh` ones are always on) |
 | `[navegadores]` | `<name> = "<command>"` that opens a URL; accounts and groups pick one with `navegador`; otherwise `defecto` |
 | `[env]` | variables for every context, Normal included (contexts can override them) |
@@ -194,6 +194,13 @@ comando = "security find-generic-password -s ws/{nombre} -w"
 defecto = "open -na 'Google Chrome' --args --incognito"   # macOS
 # defecto = "google-chrome --incognito"                   # Linux
 ```
+
+`path` is a list of folders put first in `PATH`, only inside that context: for the
+programs ws launches (claude, opencode, gh), in direnv projects, and in the shells
+of the context's tmux sessions (`WS_PATH`, picked up by ws's zshrc). Handy for CLIs
+that belong to one organization, e.g. an npm prefix of its own:
+`path = ["~/.local/share/ws/npm/acme/bin"]`, installed with
+`npm i -g --prefix ~/.local/share/ws/npm/acme <package>`.
 
 ## Language
 

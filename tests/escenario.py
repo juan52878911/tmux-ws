@@ -37,12 +37,13 @@ def estandar():
     m.cuenta_github("nueva", usuario="yo-nueva")  # sin token: no conectada
     m.organizacion("empresa", github="empresa", claude="propia", git_correo="yo@empresa.com",
                    github_orgs=["empresa-co"], bloques=["base", "oc", "aws"],
-                   env={"NPM_TOKEN": "${NPM_EMP}", "AWS_PROFILE": "desde-org"})
+                   env={"NPM_TOKEN": "${NPM_EMP}", "AWS_PROFILE": "desde-org"},
+                   path=["~/.npm-empresa/bin"])
     m.organizacion("aura", github="personal", claude="personal", git_correo="yo@aura.dev", bloques=["base"])
     m.organizacion("nueva", github="nueva", claude="personal", bloques=["base"])
     m.entorno("lab", bloques=["base", "obsidian"])
     m.proyecto("empresa/api", remoto="https://github.com/empresa-co/api.git",
-               env={"AWS_PROFILE": "desde-proyecto"})
+               env={"AWS_PROFILE": "desde-proyecto"}, path=["~/api-bin", "~/.npm-empresa/bin"])
     m.proyecto("empresa/propio", remoto="https://github.com/yo-personal/propio.git",
                github="personal", claude="personal")
     m.proyecto("aura/crm")

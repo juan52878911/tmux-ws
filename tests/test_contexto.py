@@ -64,6 +64,11 @@ class Herencia(CasoMundo):
         raiz.mkdir(parents=True, exist_ok=True)
         self.assertEqual(self.efectiva(raiz)["env"]["AWS_PROFILE"], "desde-org")
 
+    def test_path_proyecto_antes_que_org_sin_repetir(self):
+        h = str(self.m.home)
+        self.assertEqual(self.efectiva(self.m.ruta("empresa/api"))["path"], [f"{h}/api-bin", f"{h}/.npm-empresa/bin"])
+        self.assertEqual(self.efectiva(self.m.ruta("aura/crm"))["path"], [])
+
 
 if __name__ == "__main__":
     unittest.main()

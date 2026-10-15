@@ -25,6 +25,16 @@ class Tmux(CasoMundo):
         self.assertEqual(self.marca("api"), "empresa/api")
         self.assertEqual(self.marca("libre"), "")
 
+    def test_apply_pone_ws_path_de_la_org(self):
+        self.m.sesion("api", self.m.ruta("empresa/api"))
+        self.m.sesion("libre", self.m.home)
+        for s in ("api", "libre"):
+            self.ws_ok("apply", s)
+        h = str(self.m.home)
+        self.assertEqual(self.m.tmux("show-environment", "-t", "=api:", "WS_PATH"),
+                         f"WS_PATH={h}/api-bin:{h}/.npm-empresa/bin")
+        self.assertNotIn("WS_PATH=", self.m.tmux("show-environment", "-t", "=libre:", "WS_PATH"))
+
     def test_flotante_hereda_y_prefijo_configurable(self):
         self.m.sesion("api", self.m.ruta("empresa/api"), marca="empresa/api")
         self.m.tmux("set", "-g", "@ws-float-prefix", "pop_")
