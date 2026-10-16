@@ -14,19 +14,34 @@ direnv (`use ws`), git (includeIf generado) y el selector de tmux.
 
 Configuración: ~/.config/ws/ws.toml. Estado generado: ~/.local/state/ws/.
 """
-import json
 import os
 import contextlib
 import fcntl
 import re
 import shlex
-import shutil
 import subprocess
 import sys
 import tomllib
 from pathlib import Path
 
 from i18n import t
+
+
+class _Perezoso:
+    """Módulo que se importa la primera vez que se usa. Los shims (cada `gh`, `claude`, `opencode`) casi
+    nunca necesitan json ni shutil, y cargarlos al arrancar costaba ~17 ms en cada llamada."""
+
+    def __init__(self, nombre):
+        self._nombre = nombre
+
+    def __getattr__(self, atributo):
+        modulo = __import__(self._nombre)
+        globals()[self._nombre] = modulo
+        return getattr(modulo, atributo)
+
+
+json = _Perezoso("json")
+shutil = _Perezoso("shutil")
 
 HOME = Path.home()
 CONFIG = Path(os.environ.get("WS_CONFIG", HOME / ".config/ws/ws.toml"))
@@ -176,11 +191,20 @@ def efectiva(cfg, ctx):
 
 
 def resolver_env(env, cfg):
-    """Expande ${SECRETO} en los valores con [secretos].comando o el entorno."""
+    """Expande ${SECRETO} en los valores con [secretos].comando o el entorno.
+
+    Pedir un secreto lanza [secretos].comando (el Llavero: 20-40 ms) y los shims lo hacen en cada `gh`. Si el
+    proceso padre ya lo lanzó ws con estas mismas variables (WS_ENV_FIRMA, que es la lista de plantillas, no
+    los valores), las resueltas ya vienen heredadas y se reutilizan: un agente que llama a gh cien veces
+    consulta el Llavero una sola."""
+    firma = repr(sorted((k, str(v)) for k, v in env.items()))
+    if os.environ.get("WS_ENV_FIRMA") == firma and all(k in os.environ for k in env):
+        return {k: os.environ[k] for k in env} | {"WS_ENV_FIRMA": firma}
     salida = {}
     for k, v in env.items():
         v = os.path.expanduser(str(v))
         salida[k] = VAR.sub(lambda m: secreto(m.group(1), cfg) or "", v)
+    salida["WS_ENV_FIRMA"] = firma
     return salida
 
 
@@ -641,6 +665,14 @@ def descubrir(ruta, cfg=None):
     """Registra el repo de `ruta` si pertenece a una org conocida. Devuelve su
     clave de proyecto (nueva o existente) o None."""
     cfg = cfg or cargar()
+    # Lo normal es que la carpeta ya esté dentro de un proyecto registrado: eso se
+    # sabe por la ruta, sin lanzar git (el selector lo pregunta por cada pane).
+    ctx = contexto(cfg, ruta, usar_tmux=False)
+    if ctx and ctx["proyecto"]:
+        return ctx["proyecto"]
+    # Una carpeta temporal nunca se registra (ver abajo): tampoco hace falta git para saberlo.
+    if es_temporal(ruta):
+        return None
     top = _git(ruta, "rev-parse", "--show-toplevel")
     if not top:
         return None
@@ -980,7 +1012,7 @@ def main():
         git_credential(*resto)
     elif orden == "apply" and resto:
         apply(resto[0])
-    elif orden in ("menu", "nueva", "preview", "accion"):
+    elif orden in ("menu", "nueva", "preview", "accion", "descubrir-sesiones"):
         import ws_menu
         ws_menu.main(orden, resto)
     else:

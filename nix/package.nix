@@ -14,8 +14,10 @@ stdenvNoCC.mkDerivation {
     cp -r src scripts shims share ws.tmux $share/
     # fzf y tmux se AÑADEN al final del PATH: ws hace exec de claude/gh y no
     # debe cambiarles qué binarios encuentran.
+    # -S: ws solo usa la biblioteca estándar; sin `site` arranca ~5 ms antes, y los
+    # shims (gh, claude, opencode) lo pagan en cada llamada.
     makeWrapper ${python3}/bin/python3 $out/bin/ws \
-      --add-flags $share/src/ws.py \
+      --add-flags "-S $share/src/ws.py" \
       --suffix PATH : ${lib.makeBinPath [ fzf tmux git ]}
     mkdir -p $share/bin
     ln -s $out/bin/ws $share/bin/ws

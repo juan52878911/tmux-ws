@@ -21,7 +21,7 @@ let
       pkgs.writeShellScriptBin "ws" ''
         ${lib.optionalString (cfg.nixpkgs != null) "export WS_NIXPKGS=\${WS_NIXPKGS:-${lib.escapeShellArg cfg.nixpkgs}}"}
         export PATH="$PATH:${lib.makeBinPath [ pkgs.fzf pkgs.tmux ]}"
-        exec ${pkgs.python3}/bin/python3 ${cfg.checkout}/src/ws.py "$@"
+        exec ${pkgs.python3}/bin/python3 -S ${cfg.checkout}/src/ws.py "$@"
       '';
 
   enlace = ruta: config.lib.file.mkOutOfStoreSymlink ruta;

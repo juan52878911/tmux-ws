@@ -377,6 +377,11 @@ def preview(clave):
         print(f" {TENUE}▐{FIN} " + f" {TENUE}·{FIN} ".join(ventanas) + "\n")
         print(tmux("capture-pane", "-ep", "-t", f"={sesion}:", salida=True))
         return
+    vista_fija(cfg, tipo, valor)
+
+
+def vista_fija(cfg, tipo, valor):
+    """La parte de la vista previa que no depende de tmux: cabeceras y proyectos sin sesión abierta."""
     if tipo == "h":
         print(f"\n {ACENTO}{NEGRITA}{t('p_normal_title')}{FIN}\n")
         print(f"  {TEXTO}{t('p_normal_text')}{FIN}")
@@ -404,6 +409,36 @@ def preview(clave):
         _dato(t("p_tools"), ", ".join(ef["herramientas"]) or t("p_host_tools"))
         accion = t("p_open") if proyecto else t("p_new_here")
         print(f"\n  {SECUNDARIO}enter{FIN} {TEXTO}{accion}{FIN}" + ("" if proyecto else f"   {SECUNDARIO}^g{FIN} {TEXTO}{t('p_connect')}{FIN}"))
+
+
+def _archivo(clave):
+    return clave.replace("/", "%")
+
+
+def preparar_vistas(cfg, filas):
+    """Deja en una carpeta temporal lo que la vista previa de cada fila necesita, para que fzf la pinte con
+    scripts/ws-preview.sh (bash y una sola llamada a tmux) en vez de arrancar Python en cada movimiento del
+    cursor. Devuelve el comando de --preview; si falta el script, el de siempre."""
+    import contextlib, io, tempfile
+    script = Path(__file__).resolve().parent.parent / "scripts" / "ws-preview.sh"
+    if not script.exists():
+        return f"{_yo()} preview {{1}}", None
+    d = Path(tempfile.mkdtemp(prefix="ws-vista-"))
+    for clave, _ in filas:
+        tipo, _, valor = clave.partition(":")
+        if tipo == "s":
+            continue  # el nombre de la sesión va en la propia clave
+        if tipo == "p":
+            (d / f"{_archivo(clave)}.ses").write_text(sesion_de_proyecto(cfg, valor) or "")
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            vista_fija(cfg, tipo, valor)
+        (d / f"{_archivo(clave)}.txt").write_text(buf.getvalue())
+    colores = {"ACENTO": ACENTO, "SECUNDARIO": SECUNDARIO, "TENUE": TENUE, "TEXTO": TEXTO,
+               "NEGRITA": NEGRITA, "FIN": FIN}
+    (d / "tema.sh").write_text("".join(f"{k}={shlex.quote(v)}\n" for k, v in colores.items()))
+    (d / "yo").write_text(_yo())
+    return f"bash {shlex.quote(str(script))} {shlex.quote(str(d))} {{1}}", d
 
 
 def _yo():
@@ -476,41 +511,54 @@ def descubrir_sesiones():
     """Registra los repos de orgs conocidas abiertos en cualquier pane y pasa
     cada sesión al proyecto donde está su pane activo (si es del mismo grupo)."""
     cfg = ws.cargar()
-    rutas = {}
+    vistas = {}  # una carpeta abierta en varios panes se mira una vez
     salida = tmux("list-panes", "-a", "-F", "#{session_name}\t#{pane_current_path}\t#{pane_active}#{window_active}", salida=True)
     for linea in salida.splitlines():
         sesion, ruta, activo = (linea.split("\t") + ["", ""])[:3]
         if sesion.startswith(ws.prefijo_flotante()) or not ruta:
             continue
-        clave = ws.descubrir(ruta, cfg)
-        if clave:
-            cfg = ws.cargar()
-            if activo == "11":
-                ws.remarcar_sesion(sesion, clave)
+        if ruta not in vistas:
+            vistas[ruta] = ws.descubrir(ruta, cfg)
+            if vistas[ruta]:
+                cfg = ws.cargar()
+        if vistas[ruta] and activo == "11":
+            ws.remarcar_sesion(sesion, vistas[ruta])
 
 
 def menu():
     ws.sync_si_hace_falta()
-    descubrir_sesiones()
+    # Registrar repos nuevos y remarcar sesiones lanza git por cada carpeta
+    # desconocida: va en segundo plano para que el selector salga al instante.
+    # Lo que descubra se ve en la siguiente apertura.
+    subprocess.Popen([sys.executable, str(Path(ws.__file__)), "descubrir-sesiones"],
+                     stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                     start_new_session=True)
     cfg = ws.cargar()
     yo = _yo()
     recargar = f"reload({yo} accion lineas)"
     # Acciones propias: [acciones.<nombre>] tecla = "ctrl-o", cmd = "…", etiqueta = "…"
     propias = [(n, a) for n, a in cfg.get("acciones", {}).items() if a.get("tecla") and a.get("cmd")]
-    tecla, claves = elegir(
-        lineas_menu(cfg),
-        pie=atajos(("enter", t("k_open")), ("^n", t("k_new")), ("^x", t("k_close")), ("^r", t("k_rename")),
-                   ("^e", t("k_edit")), ("^g", t("k_github")),
-                   *[(a["tecla"].replace("ctrl-", "^"), a.get("etiqueta", n)) for n, a in propias],
-                   ("/", t("k_search"))),
-        preview=f"{yo} preview {{1}}",
-        teclas=["ctrl-n"],
-        binds=[f"ctrl-x:execute({yo} accion cerrar {{1}})+{recargar}",
-               f"ctrl-r:execute({yo} accion renombrar {{1}})+{recargar}",
-               f"ctrl-e:execute({yo} accion editar)+{recargar}",
-               f"ctrl-g:execute({yo} accion github {{1}})+{recargar}",
-               *[f"{a['tecla']}:execute({yo} accion propia {{1}} {shlex.quote(n)})+{recargar}"
-                 for n, a in propias]])
+    filas = lineas_menu(cfg)
+    vista, carpeta = preparar_vistas(cfg, filas)
+    try:
+        tecla, claves = elegir(
+            filas,
+            pie=atajos(("enter", t("k_open")), ("^n", t("k_new")), ("^x", t("k_close")), ("^r", t("k_rename")),
+                       ("^e", t("k_edit")), ("^g", t("k_github")),
+                       *[(a["tecla"].replace("ctrl-", "^"), a.get("etiqueta", n)) for n, a in propias],
+                       ("/", t("k_search"))),
+            preview=vista,
+            teclas=["ctrl-n"],
+            binds=[f"ctrl-x:execute({yo} accion cerrar {{1}})+{recargar}",
+                   f"ctrl-r:execute({yo} accion renombrar {{1}})+{recargar}",
+                   f"ctrl-e:execute({yo} accion editar)+{recargar}",
+                   f"ctrl-g:execute({yo} accion github {{1}})+{recargar}",
+                   *[f"{a['tecla']}:execute({yo} accion propia {{1}} {shlex.quote(n)})+{recargar}"
+                     for n, a in propias]])
+    finally:
+        if carpeta:
+            import shutil
+            shutil.rmtree(carpeta, ignore_errors=True)
     if tecla is None:
         return
     clave = claves[0] if claves else "h:normal"
@@ -695,6 +743,8 @@ def main(orden, resto):
         CWD = Path(resto[0])
     if orden == "preview":
         preview(resto[0] if resto else "")
+    elif orden == "descubrir-sesiones":
+        descubrir_sesiones()
     elif orden == "accion":
         accion(*resto[:3])
     elif orden in ("menu", "nueva"):

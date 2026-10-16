@@ -25,8 +25,14 @@ if [[ "$sesion" == "$pf"* && -n "$(tmux show -gqv @ws-float-script)" ]]; then
 fi
 
 opt() { local v; v=$(tmux show -gqv "$1"); echo "${v:-$2}"; }
-titulo=$(opt @ws-title-menu "$("$ws" i18n title_menu)")
-[[ "$orden" == nueva ]] && titulo=$(opt @ws-title-new "$("$ws" i18n title_new)")
+# El título traducido cuesta arrancar Python (~50 ms) antes de abrir el popup: se
+# calcula la primera vez y se guarda en la opción, que es la que manda.
+titulo_de() {
+  local v; v=$(tmux show -gqv "$1")
+  if [[ -z "$v" ]]; then v=$("$ws" i18n "$2"); tmux set -g "$1" "$v"; fi
+  echo "$v"
+}
+if [[ "$orden" == nueva ]]; then titulo=$(titulo_de @ws-title-new title_new); else titulo=$(titulo_de @ws-title-menu title_menu); fi
 estilo=()
 [[ -n "$(opt @ws-popup-style "")" ]] && estilo+=(-s "$(opt @ws-popup-style "")")
 [[ -n "$(opt @ws-popup-border-style "")" ]] && estilo+=(-S "$(opt @ws-popup-border-style "")")
